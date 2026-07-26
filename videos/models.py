@@ -285,6 +285,7 @@ class AdminAuditLog(models.Model):
 class SystemSettings(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     system_name = models.CharField("系统名称", max_length=80, default="私密视频授权播放系统")
+    ip_blacklist = models.TextField("IP黑名单", blank=True, default="")
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

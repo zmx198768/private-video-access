@@ -16,6 +16,40 @@
     <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ message }}</div>
   {% endfor %}
   <div class="settings-grid">
+    <section class="settings-card settings-card-wide">
+      <div class="settings-card-heading">
+        <span class="settings-icon network-icon" aria-hidden="true">IP</span>
+        <div>
+          <h2>IP黑名单</h2>
+          <p>命中任一规则的客户端IP将无法访问系统，规则按完整IP进行正则匹配。</p>
+        </div>
+      </div>
+      <form method="post" class="settings-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="ip_blacklist">
+        <div class="field-group">
+          <label for="{{ blacklist_form.ip_blacklist.id_for_label }}">
+            黑名单规则
+            <span>每行一条</span>
+          </label>
+          {{ blacklist_form.ip_blacklist }}
+          {% for error in blacklist_form.ip_blacklist.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <p class="field-help">
+            使用完整匹配。例如单个IP：
+            <code>^203\.0\.113\.25$</code>；
+            一个IPv4网段：
+            <code>^198\.51\.100\.\d{1,3}$</code>。
+          </p>
+        </div>
+        <div class="network-status">
+          <span>当前管理IP</span>
+          <code>{{ request_ip|default:"无法识别" }}</code>
+          <p>系统不会保存会命中当前管理IP的规则，以避免管理员被意外锁定。</p>
+        </div>
+        <button class="button button-primary" type="submit">保存IP黑名单</button>
+      </form>
+    </section>
+
     <section class="settings-card">
       <div class="settings-card-heading">
         <span class="settings-icon" aria-hidden="true">A</span>

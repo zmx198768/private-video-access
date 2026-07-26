@@ -1,6 +1,5 @@
 import hashlib
 import hmac
-import ipaddress
 import json
 import re
 import subprocess
@@ -35,11 +34,13 @@ from django.views.decorators.http import require_GET, require_POST
 from .forms import (
     AccessCodeForm,
     CodeEntryForm,
+    IPBlacklistForm,
     StyledPasswordChangeForm,
     SystemSettingsForm,
     VideoTitleForm,
     VideoUploadForm,
 )
+from .ip_access import client_ip
 from .models import (
     AccessCode,
     AdminAuditLog,
@@ -50,17 +51,6 @@ from .models import (
     ViewEvent,
     digest_access_code,
 )
-
-
-def client_ip(request):
-    value = request.META.get("REMOTE_ADDR")
-    if settings.TRUST_PROXY_HEADERS:
-        value = request.META.get("HTTP_X_REAL_IP") or value
-    try:
-        return str(ipaddress.ip_address(value))
-    except (ValueError, TypeError):
-        return None
-
 
 def _code_fingerprint(code):
     return hashlib.sha256(code.encode()).hexdigest()[:16]
@@ -335,7 +325,13 @@ def _audit(request, action, target, detail=""):
 @staff_member_required
 def manage_settings(request):
     settings_obj = SystemSettings.load()
+    request_ip = client_ip(request)
     name_form = SystemSettingsForm(instance=settings_obj, prefix="identity")
+    blacklist_form = IPBlacklistForm(
+        instance=settings_obj,
+        prefix="network",
+        current_ip=request_ip,
+    )
     password_form = StyledPasswordChangeForm(request.user, prefix="password")
 
     if request.method == "POST" and request.POST.get("action") == "system_name":
@@ -347,6 +343,29 @@ def manage_settings(request):
             settings_obj.save()
             _audit(request, "update_system_name", settings_obj, f"系统名称由“{old_name}”改为“{settings_obj.system_name}”")
             messages.success(request, "系统名称已更新。")
+            return redirect("videos:settings")
+
+    if request.method == "POST" and request.POST.get("action") == "ip_blacklist":
+        blacklist_form = IPBlacklistForm(
+            request.POST,
+            instance=settings_obj,
+            prefix="network",
+            current_ip=request_ip,
+        )
+        if blacklist_form.is_valid():
+            old_count = len([rule for rule in settings_obj.ip_blacklist.splitlines() if rule])
+            with transaction.atomic():
+                settings_obj = blacklist_form.save(commit=False)
+                settings_obj.updated_by = request.user
+                settings_obj.save()
+                new_count = len([rule for rule in settings_obj.ip_blacklist.splitlines() if rule])
+                _audit(
+                    request,
+                    "update_ip_blacklist",
+                    settings_obj,
+                    f"IP黑名单规则数由 {old_count} 条改为 {new_count} 条",
+                )
+            messages.success(request, "IP黑名单已更新。")
             return redirect("videos:settings")
 
     if request.method == "POST" and request.POST.get("action") == "password":
@@ -363,7 +382,9 @@ def manage_settings(request):
         "videos/settings.html",
         {
             "name_form": name_form,
+            "blacklist_form": blacklist_form,
             "password_form": password_form,
+            "request_ip": request_ip,
             "settings_obj": settings_obj,
         },
     )

@@ -24,7 +24,7 @@ python manage.py migrate
 - `videos_viewevent`：播放事件
 - `videos_securityevent`：失败授权和限流事件
 - `videos_adminauditlog`：管理员操作审计
-- `videos_systemsettings`：单例系统名称配置
+- `videos_systemsettings`：单例系统名称与IP黑名单配置
 - Django `auth_*`、`django_session`：管理员账号与会话
 
 ## 迁移流程

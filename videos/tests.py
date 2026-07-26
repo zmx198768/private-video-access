@@ -13,7 +13,16 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import AccessCode, PlaybackSession, SecurityEvent, SystemSettings, Video, ViewEvent, digest_access_code
+from .models import (
+    AccessCode,
+    AdminAuditLog,
+    PlaybackSession,
+    SecurityEvent,
+    SystemSettings,
+    Video,
+    ViewEvent,
+    digest_access_code,
+)
 from .tasks import scan_video_directory
 from .views import _stream_signature
 
@@ -423,6 +432,132 @@ class ManagementTests(TestCase):
         self.client.logout()
         response = self.client.get(reverse("videos:access"))
         self.assertContains(response, "星河视频中心")
+
+    def test_staff_can_update_ip_blacklist_with_regular_expressions(self):
+        user = get_user_model().objects.create_user(
+            "network-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("videos:settings"),
+            {
+                "action": "ip_blacklist",
+                "network-ip_blacklist": (
+                    r"^203\.0\.113\.25$" "\n"
+                    r"^198\.51\.100\.\d{1,3}$"
+                ),
+            },
+            REMOTE_ADDR="192.0.2.10",
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "IP黑名单已更新")
+        self.assertEqual(
+            SystemSettings.load().ip_blacklist,
+            r"^203\.0\.113\.25$" "\n" r"^198\.51\.100\.\d{1,3}$",
+        )
+        self.assertTrue(
+            AdminAuditLog.objects.filter(
+                actor=user,
+                action="update_ip_blacklist",
+            ).exists()
+        )
+
+    def test_ip_blacklist_rejects_invalid_regular_expression(self):
+        user = get_user_model().objects.create_user(
+            "invalid-network-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("videos:settings"),
+            {
+                "action": "ip_blacklist",
+                "network-ip_blacklist": "[invalid",
+            },
+            REMOTE_ADDR="192.0.2.11",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "正则表达式无效")
+        self.assertEqual(SystemSettings.load().ip_blacklist, "")
+
+    def test_ip_blacklist_prevents_locking_current_admin_ip(self):
+        user = get_user_model().objects.create_user(
+            "lockout-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("videos:settings"),
+            {
+                "action": "ip_blacklist",
+                "network-ip_blacklist": r"^192\.0\.2\.\d+$",
+            },
+            REMOTE_ADDR="192.0.2.12",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "规则会命中当前管理IP")
+        self.assertEqual(SystemSettings.load().ip_blacklist, "")
+
+    def test_non_staff_cannot_update_ip_blacklist(self):
+        user = get_user_model().objects.create_user(
+            "ordinary-user",
+            password="strong-test-password",
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("videos:settings"),
+            {
+                "action": "ip_blacklist",
+                "network-ip_blacklist": r"^203\.0\.113\.25$",
+            },
+            REMOTE_ADDR="192.0.2.13",
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+        self.assertEqual(SystemSettings.load().ip_blacklist, "")
+
+    def test_blacklisted_ip_is_denied_and_security_event_is_recorded(self):
+        settings_obj = SystemSettings.load()
+        settings_obj.ip_blacklist = r"^203\.0\.113\.\d{1,3}$"
+        settings_obj.save()
+
+        denied = self.client.get(
+            reverse("videos:access"),
+            REMOTE_ADDR="203.0.113.42",
+            HTTP_USER_AGENT="Blacklist test",
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertContains(denied, "该IP已被禁止访问", status_code=403)
+        self.assertTrue(
+            SecurityEvent.objects.filter(
+                event_type="ip_blacklisted",
+                ip_address="203.0.113.42",
+            ).exists()
+        )
+
+        allowed = self.client.get(
+            reverse("videos:access"),
+            REMOTE_ADDR="198.51.100.42",
+        )
+        self.assertEqual(allowed.status_code, 200)
+
+    @override_settings(TRUST_PROXY_HEADERS=True)
+    def test_ip_blacklist_uses_trusted_real_ip_header(self):
+        settings_obj = SystemSettings.load()
+        settings_obj.ip_blacklist = r"^203\.0\.113\.77$"
+        settings_obj.save()
+
+        response = self.client.get(
+            reverse("videos:access"),
+            REMOTE_ADDR="127.0.0.1",
+            HTTP_X_REAL_IP="203.0.113.77",
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_staff_can_change_password_without_losing_session(self):
         user = get_user_model().objects.create_user("password-admin", password="old-strong-password", is_staff=True)

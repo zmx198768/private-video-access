@@ -124,6 +124,14 @@ CSRF_TRUSTED_ORIGINS=https://video.example.com
 
 如果TLS在上游代理终止，确认代理正确传递 `X-Forwarded-Proto`。
 
+如果需要在系统设置中按真实客户端IP执行黑名单，请确认请求只能经过可信Nginx代理，并设置：
+
+```text
+TRUST_PROXY_HEADERS=1
+```
+
+应用只在该开关启用时读取Nginx设置的 `X-Real-IP`。不要让客户端绕过Nginx直接访问Gunicorn端口。
+
 ## 10. 部署更新
 
 1. 备份MySQL与 `/etc/private-video.env`。

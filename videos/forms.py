@@ -3,6 +3,7 @@ from django.conf import settings
 from django.contrib.auth.forms import PasswordChangeForm
 from django.utils import timezone
 
+from .ip_access import is_ip_blocked, normalize_ip_blacklist
 from .models import AccessCode, SystemSettings, digest_access_code, normalize_access_code
 
 
@@ -150,6 +151,41 @@ class SystemSettingsForm(forms.ModelForm):
         if not name:
             raise forms.ValidationError("请输入系统名称")
         return name
+
+
+class IPBlacklistForm(forms.ModelForm):
+    class Meta:
+        model = SystemSettings
+        fields = ("ip_blacklist",)
+        widgets = {
+            "ip_blacklist": forms.Textarea(
+                attrs={
+                    "class": "form-control ip-blacklist-input",
+                    "rows": 9,
+                    "spellcheck": "false",
+                    "placeholder": (
+                        "每行一条正则表达式，例如：\n"
+                        r"^203\.0\.113\.25$" "\n"
+                        r"^198\.51\.100\.\d{1,3}$"
+                    ),
+                }
+            )
+        }
+
+    def __init__(self, *args, current_ip=None, **kwargs):
+        self.current_ip = current_ip
+        super().__init__(*args, **kwargs)
+
+    def clean_ip_blacklist(self):
+        try:
+            blacklist = normalize_ip_blacklist(self.cleaned_data["ip_blacklist"])
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+        if self.current_ip and is_ip_blocked(self.current_ip, blacklist):
+            raise forms.ValidationError(
+                f"规则会命中当前管理IP（{self.current_ip}），为避免锁定管理员，无法保存"
+            )
+        return blacklist
 
 
 class StyledPasswordChangeForm(PasswordChangeForm):

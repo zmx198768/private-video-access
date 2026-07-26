@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ video.title }} · {{ system_name }}{% endblock %}
+{% block head %}
+<script src="{% static 'vendor/hls.js/hls.min.js' %}" defer></script>
+{% endblock %}
+{% block body %}
+<main class="watch-shell">
+  <header class="watch-header">
+    <div>
+      <p class="eyebrow">AUTHORIZED VIEWING</p>
+      <h1>{{ video.title }}</h1>
+    </div>
+    <a class="text-link" href="{% url 'videos:access' %}">退出观看</a>
+  </header>
+  <section class="player-frame">
+    <video id="player" controls controlsList="nodownload noremoteplayback" disablePictureInPicture playsinline></video>
+    <div class="watermark">{{ playback_session.ip_address|default:"已授权" }} · {{ playback_session.authorized_at|date:"Y-m-d H:i" }}</div>
+    <div id="player-error" class="player-error" hidden></div>
+  </section>
+  <p class="watch-notice">本内容仅限授权观看。系统会记录播放活动，请勿录制或传播。</p>
+</main>
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+  const video = document.getElementById("player");
+  const errorBox = document.getElementById("player-error");
+  const manifestUrl = "{{ manifest_url|escapejs }}";
+  const eventUrl = "{{ event_url|escapejs }}";
+  const csrf = document.cookie.split("; ").find(v => v.startsWith("csrftoken="))?.split("=")[1] || "";
+  const sendEvent = (event) => fetch(eventUrl, {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-CSRFToken": decodeURIComponent(csrf)},
+    body: JSON.stringify({event, position: video.currentTime || 0}),
+    keepalive: event === "ended"
+  }).catch(() => {});
+  const fail = (message) => {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  };
+  if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = manifestUrl;
+  } else if (window.Hls && Hls.isSupported()) {
+    const hls = new Hls({maxBufferLength: 30, backBufferLength: 15});
+    hls.loadSource(manifestUrl);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) fail("视频加载失败，授权可能已失效，请刷新页面后重试。");
+    });
+  } else {
+    fail("当前浏览器不支持此视频格式，请使用新版 Chrome、Edge、Firefox 或 Safari。");
+  }
+  video.addEventListener("play", () => sendEvent("start"), {once: true});
+  video.addEventListener("pause", () => { if (!video.ended) sendEvent("pause"); });
+  video.addEventListener("seeked", () => sendEvent("seek"));
+  video.addEventListener("ended", () => sendEvent("ended"));
+  setInterval(() => { if (!video.paused && !video.ended) sendEvent("heartbeat"); }, 15000);
+  video.addEventListener("contextmenu", event => event.preventDefault());
+});
+</script>
+{% endblock %}

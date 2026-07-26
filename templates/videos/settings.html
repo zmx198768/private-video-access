@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}系统设置 · {{ system_name }}{% endblock %}
+{% block body %}
+<header class="admin-header">
+  <div>
+    <p class="eyebrow">SYSTEM SETTINGS</p>
+    <h1>系统设置</h1>
+    <p class="admin-subtitle">{{ system_name }}</p>
+  </div>
+  <nav>
+    <a class="button button-small" href="{% url 'videos:manage' %}">返回管理控制台</a>
+  </nav>
+</header>
+<main class="admin-main settings-main">
+  {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ message }}</div>
+  {% endfor %}
+  <div class="settings-grid">
+    <section class="settings-card">
+      <div class="settings-card-heading">
+        <span class="settings-icon" aria-hidden="true">A</span>
+        <div>
+          <h2>系统名称</h2>
+          <p>用于公开授权页、管理控制台、浏览器标题和系统后台。</p>
+        </div>
+      </div>
+      <form method="post" class="settings-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="system_name">
+        <div class="field-group">
+          <label for="{{ name_form.system_name.id_for_label }}">系统名称</label>
+          {{ name_form.system_name }}
+          {% for error in name_form.system_name.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        </div>
+        <p class="settings-meta">
+          上次修改：{{ settings_obj.updated_at|date:"Y-m-d H:i:s" }}
+          {% if settings_obj.updated_by %} · {{ settings_obj.updated_by.username }}{% endif %}
+        </p>
+        <button class="button button-primary" type="submit">保存系统名称</button>
+      </form>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-heading">
+        <span class="settings-icon lock-icon" aria-hidden="true">●</span>
+        <div>
+          <h2>修改管理员密码</h2>
+          <p>修改当前账号“{{ request.user.username }}”的登录密码。</p>
+        </div>
+      </div>
+      <form method="post" class="settings-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="password">
+        {% for hidden in password_form.hidden_fields %}{{ hidden }}{% endfor %}
+        {% for field in password_form.visible_fields %}
+          <div class="field-group">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="password-help">{{ field.help_text|safe }}</div>{% endif %}
+            {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          </div>
+        {% endfor %}
+        {% for error in password_form.non_field_errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+        <div class="password-warning">
+          <span aria-hidden="true">!</span>
+          <p>修改后请妥善保存新密码。系统不会在页面或数据库中保存密码明文。</p>
+        </div>
+        <button class="button button-primary" type="submit">修改登录密码</button>
+      </form>
+    </section>
+  </div>
+</main>
+{% endblock %}

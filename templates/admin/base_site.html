@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ system_name }} 系统管理{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  #site-name a { font-weight: 700; }
+  .control-console-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--header-link-color);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .control-console-link:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ system_name }} 系统管理</a></div>
+{% endblock %}
+
+{% block nav-global %}
+<a class="control-console-link" href="{% url 'videos:manage' %}">← 返回控制台</a>
+{% endblock %}

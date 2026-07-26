@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}授权码已生成 · {{ video.title }}{% endblock %}
+{% block body %}
+<main class="issued-page">
+  <section class="issued-card">
+    <div class="success-symbol" aria-hidden="true">✓</div>
+    <p class="section-kicker">CREATED SUCCESSFULLY</p>
+    <h1>授权码已生成</h1>
+    <p class="lead">已为“{{ video.title }}”生成 {{ codes|length }} 个授权码。</p>
+
+    <div class="one-time-warning">
+      <span aria-hidden="true">!</span>
+      <div>
+        <strong>这是唯一一次完整显示</strong>
+        <p>离开本页后只能看到授权码尾号，请立即复制并妥善保存。</p>
+      </div>
+    </div>
+
+    <div class="issued-list">
+      {% for code in codes %}
+        <div class="issued-code-row">
+          <div>
+            <span>授权码 {{ forloop.counter|stringformat:"02d" }}</span>
+            <code>{{ code }}</code>
+          </div>
+          <button type="button" class="copy-one" data-code="{{ code }}" aria-label="复制授权码 {{ code }}">
+            复制
+          </button>
+        </div>
+      {% endfor %}
+    </div>
+
+    {{ codes|json_script:"issued-code-data" }}
+    <div class="issued-actions">
+      <button id="copy-all" class="button button-primary" type="button">复制全部授权码</button>
+      <a class="button button-ghost" href="{% url 'videos:create_codes' video.id %}">继续生成</a>
+      <a class="button button-ghost" href="{% url 'videos:manage' %}">返回控制台</a>
+    </div>
+    <p id="copy-feedback" class="copy-feedback" aria-live="polite"></p>
+  </section>
+</main>
+<script>
+(() => {
+  const codes = JSON.parse(document.getElementById("issued-code-data").textContent);
+  const feedback = document.getElementById("copy-feedback");
+  const copy = async (value, message) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const area = document.createElement("textarea");
+        area.value = value;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        if (!document.execCommand("copy")) throw new Error("copy failed");
+        area.remove();
+      }
+      feedback.textContent = message;
+    } catch (_error) {
+      feedback.textContent = "复制失败，请手动选择授权码复制。";
+    }
+  };
+  document.querySelectorAll(".copy-one").forEach((button) => {
+    button.addEventListener("click", () => {
+      copy(button.dataset.code, "已复制该授权码");
+      button.textContent = "已复制";
+    });
+  });
+  document.getElementById("copy-all").addEventListener("click", (event) => {
+    copy(codes.join("\n"), `已复制 ${codes.length} 个授权码`);
+    event.currentTarget.textContent = "已复制全部";
+  });
+})();
+</script>
+{% endblock %}

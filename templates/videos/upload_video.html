@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}上传视频{% endblock %}
+{% block body %}
+<main class="upload-page">
+  <header class="code-page-header">
+    <a class="back-link" href="{% url 'videos:manage' %}"><span aria-hidden="true">←</span> 返回管理控制台</a>
+    <span class="header-step">上传视频</span>
+  </header>
+  <section class="upload-card">
+    <div class="section-kicker">VIDEO INGEST</div>
+    <h1>上传 MP4 视频</h1>
+    <p class="lead">文件将安全保存到服务器 <code>/video</code> 目录。上传完成后，后台会在一分钟内发现并开始转码。</p>
+    <form method="post" enctype="multipart/form-data" class="upload-form" novalidate>
+      {% csrf_token %}
+      <div class="field-group">
+        <label for="{{ form.title.id_for_label }}">视频名称 <em>必填</em></label>
+        {{ form.title }}
+        <span class="field-help">这是管理端与观看页面显示的名称，可以随时修改</span>
+        {% for error in form.title.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="field-group">
+        <label for="{{ form.video_file.id_for_label }}">视频文件 <em>仅 MP4</em></label>
+        <label class="upload-dropzone" for="{{ form.video_file.id_for_label }}">
+          <span class="upload-icon" aria-hidden="true">↑</span>
+          <strong data-file-name>选择一个 MP4 视频</strong>
+          <small data-file-meta>点击浏览文件，最大 {{ max_upload_gb|floatformat:0 }} GB</small>
+          {{ form.video_file }}
+        </label>
+        {% for error in form.video_file.errors %}<p class="field-error upload-error">{{ error }}</p>{% endfor %}
+      </div>
+      {% if form.non_field_errors %}<div class="alert alert-error">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="upload-notice">
+        <span aria-hidden="true">i</span>
+        <p>系统会同时校验扩展名、MP4容器标识和视频轨道。上传期间请保持页面打开。</p>
+      </div>
+      <div class="form-actions">
+        <a class="button button-ghost" href="{% url 'videos:manage' %}">取消</a>
+        <button class="button button-primary upload-submit" type="submit">开始上传</button>
+      </div>
+    </form>
+  </section>
+</main>
+<script>
+(() => {
+  const input = document.getElementById("{{ form.video_file.id_for_label }}");
+  const name = document.querySelector("[data-file-name]");
+  const meta = document.querySelector("[data-file-meta]");
+  const form = document.querySelector(".upload-form");
+  const submit = document.querySelector(".upload-submit");
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+    name.textContent = file.name;
+    meta.textContent = `${(file.size / 1024 / 1024).toFixed(1)} MB · ${file.type || "video/mp4"}`;
+    if (!document.getElementById("{{ form.title.id_for_label }}").value) {
+      document.getElementById("{{ form.title.id_for_label }}").value = file.name.replace(/\.mp4$/i, "");
+    }
+  });
+  form.addEventListener("submit", () => {
+    submit.disabled = true;
+    submit.textContent = "正在上传，请勿关闭页面…";
+  });
+})();
+</script>
+{% endblock %}

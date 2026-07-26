@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}授权观看 · {{ system_name }}{% endblock %}
+{% block body %}
+<main class="access-shell">
+  <section class="access-card">
+    <div class="brand-mark" aria-hidden="true">▶</div>
+    <p class="eyebrow">PRIVATE VIEWING</p>
+    <h1>授权观看</h1>
+    <p class="system-name">{{ system_name }}</p>
+    <p class="subtle">输入管理员提供的10位授权码，验证通过后即可在线观看。</p>
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <form id="access-form" method="post" action="{% url 'videos:authorize' %}" class="stack">
+      {% csrf_token %}
+      <label for="{{ form.code.id_for_label }}">{{ form.code.label }}</label>
+      {{ form.code }}
+      {% for error in form.code.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      <button id="access-submit" class="button button-primary" type="submit">验证并观看</button>
+    </form>
+    <p id="submit-error" class="field-error" hidden>安全令牌刷新失败，请刷新页面后重试。</p>
+    <p class="privacy-note">访问时间、IP地址及观看进度将被记录，用于内容安全审计。</p>
+  </section>
+</main>
+<script>
+(() => {
+  const form = document.getElementById("access-form");
+  const button = document.getElementById("access-submit");
+  const error = document.getElementById("submit-error");
+  let submitting = false;
+  form.addEventListener("submit", async (event) => {
+    if (submitting) return;
+    event.preventDefault();
+    button.disabled = true;
+    button.textContent = "正在验证…";
+    error.hidden = true;
+    try {
+      const response = await fetch("{% url 'videos:csrf_token' %}", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {"X-Requested-With": "XMLHttpRequest"}
+      });
+      if (!response.ok) throw new Error("token refresh failed");
+      const data = await response.json();
+      form.querySelector("[name=csrfmiddlewaretoken]").value = data.csrfToken;
+      submitting = true;
+      HTMLFormElement.prototype.submit.call(form);
+    } catch (_error) {
+      button.disabled = false;
+      button.textContent = "验证并观看";
+      error.hidden = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

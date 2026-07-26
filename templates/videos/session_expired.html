@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}访问已失效{% endblock %}
+{% block body %}
+<main class="access-shell">
+  <section class="access-card">
+    <div class="brand-mark muted-mark" aria-hidden="true">×</div>
+    <h1>访问已失效</h1>
+    <p class="subtle">授权码可能已过期、被停用，或视频已停止共享。</p>
+    <a class="button button-primary" href="{% url 'videos:access' %}">重新输入授权码</a>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}观看记录{% endblock %}
+{% block body %}
+<header class="admin-header">
+  <div>
+    <p class="eyebrow">VIEWING AUDIT</p>
+    <h1>视频观看记录</h1>
+  </div>
+  <nav>
+    <a class="button button-small" href="{% url 'videos:manage' %}">返回管理控制台</a>
+  </nav>
+</header>
+<main class="admin-main">
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>全部授权会话</h2>
+        <p>共 {{ page_obj.paginator.count }} 条记录，每页显示25条。</p>
+      </div>
+      <span class="page-indicator">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>视频</th><th>授权码</th><th>IP地址</th><th>授权时间</th><th>开始时间</th><th>最后活动</th><th>观看时长</th><th>最远进度</th><th>状态</th></tr></thead>
+        <tbody>
+        {% for session in page_obj %}
+          <tr>
+            <td>{{ session.access_code.video.title }}</td>
+            <td class="mono">******{{ session.access_code.code_hint }}</td>
+            <td class="mono">{{ session.ip_address|default:"—" }}</td>
+            <td>{{ session.authorized_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ session.started_at|date:"Y-m-d H:i:s"|default:"—" }}</td>
+            <td>{{ session.last_seen_at|date:"Y-m-d H:i:s"|default:"—" }}</td>
+            <td>{{ session.watched_seconds }} 秒</td>
+            <td>{{ session.max_position_seconds }} 秒</td>
+            <td>{{ session.get_state_display }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="9" class="empty">暂无观看记录。</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+      <nav class="pagination" aria-label="观看记录分页">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}">上一页</a>
+        {% else %}
+          <span class="disabled">上一页</span>
+        {% endif %}
+        {% for number in page_range %}
+          {% if number == page_obj.paginator.ELLIPSIS %}
+            <span class="ellipsis">{{ number }}</span>
+          {% elif number == page_obj.number %}
+            <span class="current" aria-current="page">{{ number }}</span>
+          {% else %}
+            <a href="?page={{ number }}">{{ number }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}">下一页</a>
+        {% else %}
+          <span class="disabled">下一页</span>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

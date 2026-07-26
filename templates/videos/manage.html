@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}管理控制台{% endblock %}
+{% block body %}
+<header class="admin-header">
+  <div>
+    <p class="eyebrow">PRIVATE VIDEO CONTROL</p>
+    <h1>{{ system_name }}</h1>
+    <p class="admin-subtitle">视频共享管理</p>
+  </div>
+  <nav>
+    <a class="button button-small button-primary nav-button" href="{% url 'videos:upload_video' %}">上传视频</a>
+    <a href="{% url 'videos:records' %}">观看记录</a>
+    <a href="{% url 'videos:settings' %}">系统设置</a>
+    <a href="/admin/">系统管理</a>
+    <form method="post" action="/admin/logout/">{% csrf_token %}<button class="link-button">退出</button></form>
+  </nav>
+</header>
+<main class="admin-main">
+  {% for message in messages %}<div class="alert alert-success">{{ message }}</div>{% endfor %}
+  <section class="summary-grid">
+    <div class="metric"><span>视频总数</span><strong>{{ videos|length }}</strong></div>
+    <div class="metric"><span>累计播放会话</span><strong>{{ session_count }}</strong></div>
+    <div class="metric"><span>扫描目录</span><strong>/video</strong></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div><h2>视频与授权码</h2><p>后台每分钟自动扫描服务器视频目录。</p></div>
+    </div>
+    {% if videos %}
+      <div class="video-list">
+      {% for video in videos %}
+        <article class="video-card">
+          <div class="video-topline">
+            <div>
+              <h3>{{ video.title }}</h3>
+              <p class="file-meta">{{ video.width|default:"—" }}×{{ video.height|default:"—" }} · {{ video.duration_seconds|floatformat:0|default:"—" }} 秒 · {{ video.source_size|filesizeformat }}</p>
+              <p class="file-meta upload-time">上传时间：{{ video.discovered_at|date:"Y-m-d H:i:s" }}</p>
+            </div>
+            <span class="status {% if video.is_currently_shared %}status-live{% elif video.processing_status == 'failed' %}status-error{% else %}status-off{% endif %}">
+              {{ video.sharing_status_label }}
+            </span>
+          </div>
+          {% if video.processing_error %}<p class="inline-error">{{ video.processing_error }}</p>{% endif %}
+          <div class="actions">
+            <a class="button button-small" href="{% url 'videos:create_codes' video.id %}">生成授权码</a>
+            <a class="button button-small" href="{% url 'videos:rename_video' video.id %}">编辑名称</a>
+            <form method="post" action="{% url 'videos:toggle_video' video.id %}">
+              {% csrf_token %}
+              <button class="button button-small {% if video.sharing_enabled %}button-danger{% endif %}">
+                {% if video.sharing_enabled %}停止共享{% else %}恢复共享{% endif %}
+              </button>
+            </form>
+          </div>
+          <details>
+            <summary>授权码 {{ video.access_codes.all|length }} 个</summary>
+            <div class="code-list">
+              {% for code in video.access_codes.all %}
+                <div class="code-row">
+                  <span class="mono">******{{ code.code_hint }}</span>
+                  <span>{{ code.state_label }}</span>
+                  <span>{{ code.expires_at|date:"Y-m-d H:i" }} 到期</span>
+                  <span>{{ code.note|default:"无备注" }}</span>
+                  <form method="post" action="{% url 'videos:delete_code' code.id %}" onsubmit="return confirm('确定删除授权码 ****{{ code.code_hint }}？删除后将立即失效，且无法恢复。')">
+                    {% csrf_token %}
+                    <button class="text-link delete-link" type="submit">删除</button>
+                  </form>
+                </div>
+              {% empty %}
+                <p class="empty">尚未生成授权码。</p>
+              {% endfor %}
+            </div>
+          </details>
+        </article>
+      {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>尚未发现视频</h3><p>请将视频文件上传到服务器的 <code>/video</code> 目录，系统会自动扫描。</p></div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div><h2>最近观看记录</h2><p>显示最近10次成功授权会话。</p></div>
+      <a class="button button-small" href="{% url 'videos:records' %}">查看全部记录</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>视频</th><th>授权码</th><th>IP</th><th>授权时间</th><th>观看时长</th><th>状态</th></tr></thead>
+        <tbody>
+        {% for session in recent_sessions %}
+          <tr>
+            <td>{{ session.access_code.video.title }}</td>
+            <td class="mono">******{{ session.access_code.code_hint }}</td>
+            <td>{{ session.ip_address|default:"—" }}</td>
+            <td>{{ session.authorized_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ session.watched_seconds }} 秒</td>
+            <td>{{ session.get_state_display }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="empty">暂无观看记录。</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

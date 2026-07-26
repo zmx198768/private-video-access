@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}生成授权码 · {{ video.title }}{% endblock %}
+{% block body %}
+<main class="code-page">
+  <header class="code-page-header">
+    <a class="back-link" href="{% url 'videos:manage' %}">
+      <span aria-hidden="true">←</span> 返回管理控制台
+    </a>
+    <span class="header-step">创建授权码</span>
+  </header>
+
+  <div class="code-create-layout">
+    <section class="code-form-panel">
+      <div class="section-kicker">ACCESS CONTROL</div>
+      <h1>生成查看授权码</h1>
+      <p class="lead">为指定视频创建独立的限时访问凭证。可自动生成安全随机码，也可以手工指定便于传达的授权码。</p>
+
+      <div class="selected-video">
+        <div class="video-glyph" aria-hidden="true">▶</div>
+        <div class="selected-video-copy">
+          <span>当前视频</span>
+          <strong>{{ video.title }}</strong>
+          <small>
+            {% if video.duration_seconds %}{{ video.duration_seconds|floatformat:0 }} 秒{% else %}时长未知{% endif %}
+            · {{ video.source_size|filesizeformat }}
+          </small>
+        </div>
+        <span class="status {% if video.is_ready %}status-live{% else %}status-off{% endif %}">
+          {{ video.get_processing_status_display }}
+        </span>
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <form method="post" class="code-form" novalidate>
+        {% csrf_token %}
+
+        <fieldset class="form-section">
+          <legend>
+            <span class="legend-number">01</span>
+            有效期限
+          </legend>
+          <p class="form-section-help">授权码仅在这个时间范围内可以使用，过期后立即失效。</p>
+          <div class="form-grid form-grid-two">
+            <div class="field-group">
+              <label for="{{ form.starts_at.id_for_label }}">生效时间</label>
+              {{ form.starts_at }}
+              <span class="field-help">留空时立即生效</span>
+              {% for error in form.starts_at.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field-group">
+              <label for="{{ form.expires_at.id_for_label }}">失效时间 <em>必填</em></label>
+              {{ form.expires_at }}
+              <span class="field-help">到达该时间后无法继续授权</span>
+              {% for error in form.expires_at.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+          <div class="expiry-presets" aria-label="快速设置有效期">
+            <span>快速设置：</span>
+            <button type="button" data-days="1">1天</button>
+            <button type="button" data-days="7" class="active">7天</button>
+            <button type="button" data-days="30">30天</button>
+            <button type="button" data-days="90">90天</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>
+            <span class="legend-number">02</span>
+            授权码设置
+          </legend>
+          <p class="form-section-help">自动生成支持批量创建；手工设置时每次创建一个10位授权码。</p>
+          <div class="code-mode-switch" role="radiogroup" aria-label="授权码生成方式">
+            <label class="code-mode-card">
+              <input type="radio" name="code_mode" value="auto" {% if form.code_mode.value != "manual" %}checked{% endif %}>
+              <span><strong>自动生成</strong><small>安全随机码，可批量创建</small></span>
+            </label>
+            <label class="code-mode-card">
+              <input type="radio" name="code_mode" value="manual" {% if form.code_mode.value == "manual" %}checked{% endif %}>
+              <span><strong>手工设置</strong><small>自行指定一个10位授权码</small></span>
+            </label>
+          </div>
+          {% for error in form.code_mode.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+
+          <div class="form-grid quantity-note-grid code-settings-grid">
+            <div class="field-group" data-auto-code-field>
+              <label for="{{ form.quantity.id_for_label }}">生成数量</label>
+              <div class="quantity-control">
+                <button type="button" data-quantity-action="minus" aria-label="减少数量">−</button>
+                {{ form.quantity }}
+                <button type="button" data-quantity-action="plus" aria-label="增加数量">＋</button>
+              </div>
+              <span class="field-help">每次最多生成20个</span>
+              {% for error in form.quantity.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field-group" data-manual-code-field hidden>
+              <label for="{{ form.custom_code.id_for_label }}">自定义授权码 <em>必填</em></label>
+              {{ form.custom_code }}
+              <span class="field-help">输入10位英文字母或数字，不区分大小写</span>
+              {% for error in form.custom_code.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field-group">
+              <label for="{{ form.note.id_for_label }}">备注 <span>选填</span></label>
+              {{ form.note }}
+              <span class="field-help">仅管理员可见，便于区分使用对象</span>
+              {% for error in form.note.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="form-actions">
+          <a class="button button-ghost" href="{% url 'videos:manage' %}">取消</a>
+          <button class="button button-primary create-code-button" type="submit">
+            <span aria-hidden="true">＋</span> 生成授权码
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="code-info-panel">
+      <div class="info-icon" aria-hidden="true">10</div>
+      <h2>10位访问凭证</h2>
+      <p>自动模式使用密码学安全随机数；手工模式会检查格式与历史唯一性。</p>
+      <ul class="security-list">
+        <li><span>✓</span><div><strong>仅显示一次</strong><small>完整授权码生成后只展示一次</small></div></li>
+        <li><span>✓</span><div><strong>摘要存储</strong><small>数据库中不保存授权码明文</small></div></li>
+        <li><span>✓</span><div><strong>独立控制</strong><small>每个码都可单独删除并立即失效</small></div></li>
+        <li><span>✓</span><div><strong>访问审计</strong><small>记录授权时间、IP和观看进度</small></div></li>
+      </ul>
+      <div class="info-note">
+        <span aria-hidden="true">!</span>
+        <p>生成完成后请立即复制保存。离开结果页面后无法再次查看完整授权码。</p>
+      </div>
+    </aside>
+  </div>
+</main>
+<script>
+(() => {
+  const startInput = document.getElementById("{{ form.starts_at.id_for_label }}");
+  const expiryInput = document.getElementById("{{ form.expires_at.id_for_label }}");
+  const quantityInput = document.getElementById("{{ form.quantity.id_for_label }}");
+  const modeInputs = document.querySelectorAll('input[name="code_mode"]');
+  const autoField = document.querySelector("[data-auto-code-field]");
+  const manualField = document.querySelector("[data-manual-code-field]");
+  const customCodeInput = document.getElementById("{{ form.custom_code.id_for_label }}");
+  const toLocalValue = (date) => {
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  };
+  document.querySelectorAll("[data-days]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const start = startInput.value ? new Date(startInput.value) : new Date();
+      const expiry = new Date(start.getTime() + Number(button.dataset.days) * 86400000);
+      expiryInput.value = toLocalValue(expiry);
+      document.querySelectorAll("[data-days]").forEach(item => item.classList.toggle("active", item === button));
+    });
+  });
+  document.querySelectorAll("[data-quantity-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const delta = button.dataset.quantityAction === "plus" ? 1 : -1;
+      const next = Math.max(1, Math.min(20, Number(quantityInput.value || 1) + delta));
+      quantityInput.value = next;
+    });
+  });
+  const updateCodeMode = () => {
+    const manual = document.querySelector('input[name="code_mode"]:checked')?.value === "manual";
+    autoField.hidden = manual;
+    manualField.hidden = !manual;
+    customCodeInput.required = manual;
+    document.querySelectorAll(".code-mode-card").forEach((card) => {
+      card.classList.toggle("active", card.querySelector("input").checked);
+    });
+  };
+  modeInputs.forEach((input) => input.addEventListener("change", updateCodeMode));
+  customCodeInput.addEventListener("input", () => {
+    customCodeInput.value = customCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+  });
+  updateCodeMode();
+})();
+</script>
+{% endblock %}

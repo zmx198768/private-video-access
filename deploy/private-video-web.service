@@ -1,0 +1,19 @@
+[Unit]
+Description=Private Video Gunicorn
+After=network.target mysqld.service redis.service
+
+[Service]
+Type=simple
+User=privatevideo
+Group=privatevideo
+WorkingDirectory=/opt/private-video
+EnvironmentFile=/etc/private-video.env
+ExecStart=/opt/private-video/.venv/bin/gunicorn private_video.wsgi:application --bind 127.0.0.1:8008 --workers 2 --threads 2 --timeout 3600 --access-logfile -
+Restart=always
+RestartSec=3
+UMask=0027
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}编辑视频名称{% endblock %}
+{% block body %}
+<main class="form-shell">
+  <section class="form-card compact-form-card">
+    <p class="eyebrow">VIDEO DETAILS</p>
+    <h1>编辑视频名称</h1>
+    <p class="subtle">自定义名称只影响管理端和观看页展示，不会修改服务器中的视频文件名。</p>
+    <form method="post" class="stack" novalidate>
+      {% csrf_token %}
+      <label for="{{ form.title.id_for_label }}">视频名称</label>
+      {{ form.title }}
+      {% for error in form.title.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      <p class="source-path-note">源文件：<span class="mono">{{ video.source_path }}</span></p>
+      <div class="form-actions">
+        <a class="button button-ghost" href="{% url 'videos:manage' %}">取消</a>
+        <button class="button button-primary" type="submit">保存名称</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

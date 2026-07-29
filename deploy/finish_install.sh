@@ -31,6 +31,7 @@ set +a
 unset ADMIN_USERNAME ADMIN_PASSWORD
 
 install -m 0644 deploy/private-video-web.service /etc/systemd/system/private-video-web.service
+install -m 0644 deploy/private-video-chat.service /etc/systemd/system/private-video-chat.service
 install -m 0644 deploy/private-video-worker.service /etc/systemd/system/private-video-worker.service
 install -m 0644 deploy/private-video-beat.service /etc/systemd/system/private-video-beat.service
 install -m 0644 deploy/nginx-private-video.conf /etc/nginx/conf.d/private-video.conf
@@ -39,5 +40,5 @@ chown -R privatevideo:privatevideo /opt/private-video /var/lib/private-video /vi
 
 nginx -t
 systemctl daemon-reload
-systemctl enable --now private-video-web private-video-worker private-video-beat nginx
+systemctl enable --now private-video-web private-video-chat private-video-worker private-video-beat nginx
 echo "INSTALLED"

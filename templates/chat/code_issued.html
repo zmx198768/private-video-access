@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ action_label }}{% endblock %}
+{% block body %}
+<main class="issued-page">
+  <section class="issued-card">
+    <div class="success-symbol">✓</div>
+    <p class="section-kicker">CHAT ROOM READY</p>
+    <h1>{{ action_label }}</h1>
+    <p class="lead">聊天室“{{ room.name }}”可以通过以下授权码进入。</p>
+    <div class="one-time-warning"><span>!</span><div><strong>这是唯一一次显示完整授权码</strong><p>离开本页后只能更换授权码，不能恢复当前明文。</p></div></div>
+    <div class="issued-list">
+      <div class="issued-code-row">
+        <div><span>聊天室授权码</span><code id="issued-chat-code">{{ plain_code }}</code></div>
+        <button id="copy-chat-code" class="copy-one" type="button">复制</button>
+      </div>
+    </div>
+    <p id="copy-feedback" class="copy-feedback"></p>
+    <div class="issued-actions">
+      <a class="button button-primary" href="{% url 'chat:manage' %}">返回聊天室管理</a>
+      <a class="button" href="{% url 'videos:access' %}">打开统一访问入口</a>
+    </div>
+  </section>
+</main>
+<script>
+document.getElementById("copy-chat-code").addEventListener("click", async () => {
+  const value = document.getElementById("issued-chat-code").textContent.trim();
+  const feedback = document.getElementById("copy-feedback");
+  try {
+    await navigator.clipboard.writeText(value);
+    feedback.textContent = "授权码已复制。";
+  } catch (_error) {
+    feedback.textContent = "复制失败，请手工选择授权码。";
+  }
+});
+</script>
+{% endblock %}

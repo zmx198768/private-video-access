@@ -11,6 +11,7 @@ COOKIE_JAR=/tmp/private-video-smoke-cookies.txt
 HEADERS=/tmp/private-video-smoke-headers.txt
 MANIFEST=/tmp/private-video-smoke.m3u8
 BODY=/tmp/private-video-smoke-segment.bin
+WATCH_HTML=/tmp/private-video-smoke-watch.html
 ADMIN_COOKIE_JAR=/tmp/private-video-admin-smoke-cookies.txt
 DEFAULT_HOST="${DJANGO_ALLOWED_HOSTS%%,*}"
 DEFAULT_SCHEME=http
@@ -19,8 +20,18 @@ if [[ "${COOKIE_SECURE:-0}" == "1" ]]; then
 fi
 BASE="${SMOKE_BASE_URL:-${DEFAULT_SCHEME}://${DEFAULT_HOST}}"
 
+web_ready=0
+for _ in $(seq 1 20); do
+    if curl -fsS "$BASE/health/" >/dev/null; then
+        web_ready=1
+        break
+    fi
+    sleep 1
+done
+[[ "$web_ready" == 1 ]]
+
 cleanup() {
-    rm -f "$COOKIE_JAR" "$HEADERS" "$MANIFEST" "$BODY" "$ADMIN_COOKIE_JAR" "$SOURCE"
+    rm -f "$COOKIE_JAR" "$HEADERS" "$MANIFEST" "$BODY" "$WATCH_HTML" "$ADMIN_COOKIE_JAR" "$SOURCE"
     /opt/private-video/.venv/bin/python manage.py shell --no-imports -c "
 from pathlib import Path
 import shutil
@@ -56,6 +67,14 @@ admin_login_status=$(curl -sS -o /dev/null -w '%{http_code}' \
 [[ "$admin_login_status" == 302 ]]
 manage_status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$ADMIN_COOKIE_JAR" "$BASE/manage/")
 [[ "$manage_status" == 200 ]]
+chat_manage_status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$ADMIN_COOKIE_JAR" "$BASE/chat/manage/")
+[[ "$chat_manage_status" == 200 ]]
+chat_participants_status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$ADMIN_COOKIE_JAR" "$BASE/chat/manage/participants/")
+[[ "$chat_participants_status" == 200 ]]
+entry_status=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/")
+[[ "$entry_status" == 200 ]]
+legacy_chat_entry_status=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/chat/")
+[[ "$legacy_chat_entry_status" == 302 ]]
 unset ADMIN_USERNAME ADMIN_PASSWORD
 
 ffmpeg -hide_banner -loglevel error -y \
@@ -105,8 +124,9 @@ location=$(awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}' "$HEA
 session_id=$(printf '%s' "$location" | sed -E 's#^/watch/([^/]+)/$#\1#')
 [[ -n "$session_id" ]]
 
-watch_status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" "$BASE$location")
+watch_status=$(curl -sS -o "$WATCH_HTML" -w '%{http_code}' -b "$COOKIE_JAR" "$BASE$location")
 [[ "$watch_status" == 200 ]]
+! grep -q 'class="system-nav"' "$WATCH_HTML"
 curl -fsS -b "$COOKIE_JAR" "$BASE/manifest/$session_id/index.m3u8" -o "$MANIFEST"
 segment=$(grep -v '^#' "$MANIFEST" | sed -n '1p')
 [[ -n "$segment" ]]

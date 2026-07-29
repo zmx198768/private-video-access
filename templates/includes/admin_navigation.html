@@ -1,0 +1,39 @@
+{% load static %}
+<nav class="system-nav" aria-label="系统主菜单">
+  <a class="system-nav-brand" href="{% url 'videos:manage' %}">
+    <span class="system-nav-mark">PV</span>
+    <span>{{ system_name }}</span>
+  </a>
+  <div class="system-nav-groups">
+    <details class="system-nav-group" name="system-menu" {% if request.resolver_match.namespace == "videos" and request.resolver_match.url_name != "settings" %}data-active="true"{% endif %}>
+      <summary>私密视频</summary>
+      <div class="system-submenu">
+        <a href="{% url 'videos:manage' %}">视频共享控制台</a>
+        <a href="{% url 'videos:upload_video' %}">上传MP4视频</a>
+        <a href="{% url 'videos:records' %}">视频观看记录</a>
+      </div>
+    </details>
+    <details class="system-nav-group" name="system-menu" {% if request.resolver_match.namespace == "chat" %}data-active="true"{% endif %}>
+      <summary>私密聊天</summary>
+      <div class="system-submenu">
+        <a href="{% url 'chat:manage' %}">聊天室管理</a>
+        <a href="{% url 'chat:create' %}">创建聊天室</a>
+        <a href="{% url 'chat:participants' %}">聊天参与记录</a>
+      </div>
+    </details>
+    <a class="system-nav-direct {% if request.resolver_match.url_name == 'settings' %}is-active{% endif %}" href="{% url 'videos:settings' %}">系统设置</a>
+    <details class="system-nav-group" name="system-menu">
+      <summary>系统管理</summary>
+      <div class="system-submenu">
+        <a href="/admin/">Django系统管理</a>
+        <a href="/admin/videos/adminauditlog/">管理员审计日志</a>
+        <a href="/admin/videos/securityevent/">安全事件记录</a>
+      </div>
+    </details>
+  </div>
+  <form class="system-nav-logout" method="post" action="/admin/logout/">
+    {% csrf_token %}
+    <button type="submit">退出</button>
+  </form>
+</nav>
+<script src="{% static 'js/admin-navigation.js' %}" defer></script>

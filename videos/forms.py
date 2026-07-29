@@ -4,7 +4,8 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.utils import timezone
 
 from .ip_access import is_ip_blocked, normalize_ip_blacklist
-from .models import AccessCode, SystemSettings, digest_access_code, normalize_access_code
+from .code_registry import code_digest_in_use
+from .models import SystemSettings, digest_access_code, normalize_access_code
 
 
 class AccessCodeForm(forms.Form):
@@ -82,8 +83,8 @@ class AccessCodeForm(forms.Form):
             plain = normalize_access_code(cleaned.get("custom_code"))
             if len(plain) != 10:
                 self.add_error("custom_code", "手工授权码必须为10位英文字母或数字")
-            elif AccessCode.objects.filter(code_digest=digest_access_code(plain)).exists():
-                self.add_error("custom_code", "该授权码已使用过，请更换一个")
+            elif code_digest_in_use(digest_access_code(plain)):
+                self.add_error("custom_code", "该授权码已被其他内容使用，请更换一个")
             else:
                 cleaned["custom_code"] = plain
             cleaned["quantity"] = 1
@@ -164,9 +165,9 @@ class IPBlacklistForm(forms.ModelForm):
                     "rows": 9,
                     "spellcheck": "false",
                     "placeholder": (
-                        "每行一条正则表达式，例如：\n"
-                        r"^203\.0\.113\.25$" "\n"
-                        r"^198\.51\.100\.\d{1,3}$"
+                        "每行一条，例如：\n"
+                        "203.0.113.25\n"
+                        "198.51.100.*"
                     ),
                 }
             )
@@ -208,7 +209,7 @@ class StyledPasswordChangeForm(PasswordChangeForm):
 
 class CodeEntryForm(forms.Form):
     code = forms.CharField(
-        label="查看授权码",
+        label="访问授权码",
         min_length=10,
         max_length=14,
         widget=forms.TextInput(

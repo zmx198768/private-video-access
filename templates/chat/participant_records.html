@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}聊天参与记录{% endblock %}
+{% block body %}
+<main class="admin-main">
+  <section class="panel">
+    <div class="panel-heading records-heading">
+      <div>
+        <h2>聊天参与记录</h2>
+        <p>
+          共 {{ page_obj.paginator.count }} 条记录，每页显示25条。
+          {% if selected_room %}当前仅显示“{{ selected_room.name }}”。{% endif %}
+        </p>
+      </div>
+      <form class="records-filter" method="get">
+        <label class="sr-only" for="participant-room-filter">筛选聊天室</label>
+        <select id="participant-room-filter" name="room" class="form-control">
+          <option value="">全部聊天室</option>
+          {% for room in rooms %}
+            <option value="{{ room.id }}" {% if selected_room.id == room.id %}selected{% endif %}>{{ room.name }}</option>
+          {% endfor %}
+        </select>
+        <button class="button button-small" type="submit">筛选</button>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>聊天室</th>
+            <th>昵称</th>
+            <th>IP地址</th>
+            <th>进入时间</th>
+            <th>最后活动时间</th>
+            <th>最后发言时间</th>
+            <th>消息数</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for participant in page_obj %}
+            <tr>
+              <td><a class="record-link" href="{% url 'chat:message_records' participant.room_id %}">{{ participant.room.name }}</a></td>
+              <td>{{ participant.display_name }}</td>
+              <td class="mono">{{ participant.ip_address|default:"—" }}</td>
+              <td>{{ participant.joined_at|date:"Y-m-d H:i:s" }}</td>
+              <td>{{ participant.last_seen_at|date:"Y-m-d H:i:s"|default:"—" }}</td>
+              <td>{{ participant.last_spoke_at|date:"Y-m-d H:i:s"|default:"—" }}</td>
+              <td>{{ participant.message_count }}</td>
+              <td>
+                {% if participant.revoked_at %}
+                  <span class="status status-off">已撤销</span>
+                {% elif participant.room.is_active %}
+                  <span class="status status-live">有效</span>
+                {% else %}
+                  <span class="status status-off">聊天室关闭</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="empty">暂无聊天参与记录。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+      <nav class="pagination" aria-label="聊天参与记录分页">
+        {% if page_obj.has_previous %}
+          <a href="?{% if selected_room %}room={{ selected_room.id }}&{% endif %}page={{ page_obj.previous_page_number }}">上一页</a>
+        {% else %}
+          <span class="disabled">上一页</span>
+        {% endif %}
+        {% for number in page_range %}
+          {% if number == page_obj.paginator.ELLIPSIS %}
+            <span class="ellipsis">{{ number }}</span>
+          {% elif number == page_obj.number %}
+            <span class="current" aria-current="page">{{ number }}</span>
+          {% else %}
+            <a href="?{% if selected_room %}room={{ selected_room.id }}&{% endif %}page={{ number }}">{{ number }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+          <a href="?{% if selected_room %}room={{ selected_room.id }}&{% endif %}page={{ page_obj.next_page_number }}">下一页</a>
+        {% else %}
+          <span class="disabled">下一页</span>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

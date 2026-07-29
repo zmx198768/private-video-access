@@ -111,6 +111,8 @@ def access_page(request):
 @never_cache
 @require_POST
 def authorize(request):
+    from chat.models import ChatParticipant, ChatRoom
+
     ip = client_ip(request)
     form = CodeEntryForm(request.POST)
     if not form.is_valid():
@@ -123,32 +125,77 @@ def authorize(request):
         )
         return render(request, "videos/access.html", {"form": form, "error": "尝试次数过多，请稍后再试。"}, status=429)
 
+    code_digest = digest_access_code(code)
     access_code = AccessCode.objects.select_related("video").filter(
-        code_digest=digest_access_code(code),
+        code_digest=code_digest,
         deleted_at__isnull=True,
     ).first()
-    if not access_code or not access_code.valid_at() or not access_code.video.sharing_enabled or not access_code.video.is_ready:
+    room = ChatRoom.objects.filter(code_digest=code_digest).first()
+
+    if access_code and room:
         SecurityEvent.objects.create(
             event_type="invalid_code", ip_address=ip, code_fingerprint=_code_fingerprint(code),
             user_agent=request.META.get("HTTP_USER_AGENT", "")[:2000],
+            detail="授权码同时匹配视频与聊天室，已拒绝访问",
         )
-        return render(request, "videos/access.html", {"form": form, "error": "授权码无效、未生效或已过期。"}, status=403)
+        return render(
+            request,
+            "videos/access.html",
+            {"form": form, "error": "授权码存在冲突，请联系管理员重新生成。"},
+            status=403,
+        )
 
-    session, token = PlaybackSession.create_for(
-        access_code, ip, request.META.get("HTTP_USER_AGENT", "")
+    if access_code and access_code.valid_at() and access_code.video.sharing_enabled and access_code.video.is_ready:
+        session, token = PlaybackSession.create_for(
+            access_code, ip, request.META.get("HTTP_USER_AGENT", "")
+        )
+        ViewEvent.objects.create(session=session, event_type=ViewEvent.EventType.AUTHORIZED, ip_address=ip)
+        response = redirect("videos:watch", session_id=session.id)
+        response.set_cookie(
+            _cookie_name(session.id),
+            token,
+            max_age=settings.PLAYBACK_SESSION_HOURS * 3600,
+            httponly=True,
+            secure=settings.SESSION_COOKIE_SECURE,
+            samesite="Lax",
+            path="/",
+        )
+        return response
+
+    if room and room.is_active:
+        participant, token = ChatParticipant.create_for(
+            room=room,
+            ip_address=ip,
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+        response = redirect("chat:room", participant_id=participant.id)
+        response.set_cookie(
+            participant.cookie_name,
+            token,
+            max_age=60 * 60 * 24 * 7,
+            httponly=True,
+            secure=request.is_secure(),
+            samesite="Lax",
+            path="/",
+        )
+        return response
+
+    SecurityEvent.objects.create(
+        event_type="invalid_code",
+        ip_address=ip,
+        code_fingerprint=_code_fingerprint(code),
+        user_agent=request.META.get("HTTP_USER_AGENT", "")[:2000],
+        detail="统一入口授权失败",
     )
-    ViewEvent.objects.create(session=session, event_type=ViewEvent.EventType.AUTHORIZED, ip_address=ip)
-    response = redirect("videos:watch", session_id=session.id)
-    response.set_cookie(
-        _cookie_name(session.id),
-        token,
-        max_age=settings.PLAYBACK_SESSION_HOURS * 3600,
-        httponly=True,
-        secure=settings.SESSION_COOKIE_SECURE,
-        samesite="Lax",
-        path=f"/",
+    return render(
+        request,
+        "videos/access.html",
+        {
+            "form": form,
+            "error": "授权码无效、未生效或已过期，或对应内容已停止共享。",
+        },
+        status=403,
     )
-    return response
 
 
 @never_cache

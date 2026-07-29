@@ -6,6 +6,7 @@ from django.conf import settings
 
 MAX_IP_BLACKLIST_RULES = 100
 MAX_IP_BLACKLIST_RULE_LENGTH = 200
+LEGACY_REGEX_MARKERS = ("\\", "^", "$", "[", "]", "(", ")", "{", "}", "+", "?", "|")
 
 
 def client_ip(request):
@@ -27,9 +28,9 @@ def normalize_ip_blacklist(value):
         if len(rule) > MAX_IP_BLACKLIST_RULE_LENGTH:
             raise ValueError(f"第{line_number}行超过{MAX_IP_BLACKLIST_RULE_LENGTH}个字符")
         try:
-            re.compile(rule)
+            _compile_ip_rule(rule)
         except re.error as exc:
-            raise ValueError(f"第{line_number}行正则表达式无效：{exc}") from exc
+            raise ValueError(f"第{line_number}行规则无效：{exc}") from exc
         rules.append(rule)
     if len(rules) > MAX_IP_BLACKLIST_RULES:
         raise ValueError(f"最多允许{MAX_IP_BLACKLIST_RULES}条IP黑名单规则")
@@ -38,7 +39,14 @@ def normalize_ip_blacklist(value):
 
 @lru_cache(maxsize=32)
 def _compiled_ip_blacklist(value):
-    return tuple(re.compile(rule) for rule in value.splitlines() if rule)
+    return tuple(_compile_ip_rule(rule) for rule in value.splitlines() if rule)
+
+
+def _compile_ip_rule(rule):
+    if any(marker in rule for marker in LEGACY_REGEX_MARKERS):
+        return re.compile(rule)
+    friendly_pattern = re.escape(rule).replace(r"\*", ".*")
+    return re.compile(friendly_pattern)
 
 
 def is_ip_blocked(ip, blacklist=None):

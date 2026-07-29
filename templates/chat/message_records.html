@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}聊天记录 · {{ room.name }}{% endblock %}
+{% block body %}
+<main class="admin-main">
+  <section class="panel">
+    <div class="panel-heading records-heading">
+      <div>
+        <a class="back-link records-back-link" href="{% url 'chat:manage' %}">← 返回聊天室管理</a>
+        <h2>{{ room.name }} · 聊天记录</h2>
+        <p>共 {{ page_obj.paginator.count }} 条消息，每页显示50条，按发送时间倒序排列。</p>
+      </div>
+      <a class="button button-small" href="{% url 'chat:participants' %}?room={{ room.id }}">查看参与人员</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>发送时间</th>
+            <th>昵称</th>
+            <th>IP地址</th>
+            <th>消息内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for message in page_obj %}
+            <tr>
+              <td>{{ message.created_at|date:"Y-m-d H:i:s" }}</td>
+              <td>{{ message.participant.display_name|default:"已离开访客" }}</td>
+              <td class="mono">{{ message.participant.ip_address|default:"—" }}</td>
+              <td class="message-body-cell">{{ message.body }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="empty">该聊天室暂无聊天记录。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+      <nav class="pagination" aria-label="聊天室消息分页">
+        {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">上一页</a>{% else %}<span class="disabled">上一页</span>{% endif %}
+        {% for number in page_range %}
+          {% if number == page_obj.paginator.ELLIPSIS %}
+            <span class="ellipsis">{{ number }}</span>
+          {% elif number == page_obj.number %}
+            <span class="current" aria-current="page">{{ number }}</span>
+          {% else %}
+            <a href="?page={{ number }}">{{ number }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">下一页</a>{% else %}<span class="disabled">下一页</span>{% endif %}
+      </nav>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

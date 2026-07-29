@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ room.name }} · 私密聊天{% endblock %}
+{% block staff_navigation %}{% endblock %}
+{% block body %}
+<main
+  id="chat-app"
+  class="chat-app"
+  data-history-url="{{ history_url }}"
+  data-websocket-path="{{ websocket_path }}"
+  data-participant-id="{{ participant.id }}"
+  data-has-more="{% if initial_count == 50 %}true{% else %}false{% endif %}"
+>
+  <header class="chat-header">
+    <div>
+      <p class="eyebrow">PRIVATE CHAT ROOM</p>
+      <h1>{{ room.name }}</h1>
+      <p class="chat-nickname-source">备用昵称来自《{{ room.nickname_group_label }}》</p>
+    </div>
+    <div class="chat-header-actions">
+      <div class="chat-identity">
+        <span class="chat-avatar" style="--avatar-hue: {{ participant.avatar_hue }}">{{ participant.display_name|slice:"-2:" }}</span>
+        <div><strong>{{ participant.display_name }}</strong><small>{{ participant.masked_ip }}</small></div>
+      </div>
+      <form class="chat-leave-form" method="post" action="{% url 'chat:leave' participant.id %}" onsubmit="return confirm('确定退出聊天室？退出后需要重新输入授权码。')">
+        {% csrf_token %}
+        <button class="button button-small chat-leave-button" type="submit">退出聊天室</button>
+      </form>
+    </div>
+  </header>
+
+  <section class="chat-panel">
+    <div id="chat-connection" class="chat-connection" role="status">正在连接…</div>
+    <div id="chat-scroll" class="chat-scroll">
+      <button id="chat-load-older" class="load-older" type="button" {% if initial_count < 50 %}hidden{% endif %}>加载更早消息</button>
+      <div id="chat-messages" class="chat-messages" aria-live="polite">
+        {% for message in initial_messages %}
+          <article
+            class="chat-message {% if message.participant_id == participant.id %}chat-message-own{% endif %}"
+            data-message-id="{{ message.id }}"
+          >
+            <span class="chat-avatar" style="--avatar-hue: {{ message.participant.avatar_hue }}">{{ message.participant.display_name|slice:"-2:" }}</span>
+            <div class="chat-message-content">
+              <div class="chat-message-meta">
+                <strong>{{ message.participant.display_name }}</strong>
+                <span>{{ message.participant.masked_ip }}</span>
+                <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"m-d H:i:s" }}</time>
+              </div>
+              <p>{{ message.body }}</p>
+            </div>
+          </article>
+        {% empty %}
+          <p id="chat-empty" class="chat-empty">还没有消息，来说第一句话吧。</p>
+        {% endfor %}
+      </div>
+    </div>
+    <form id="chat-compose" class="chat-compose">
+      <label class="sr-only" for="chat-body">聊天消息</label>
+      <textarea id="chat-body" maxlength="{{ message_max_length }}" rows="2" placeholder="输入消息，Enter发送，Shift+Enter换行"></textarea>
+      <button class="button button-primary" type="submit">发送</button>
+    </form>
+    <p id="chat-error" class="chat-error" role="alert"></p>
+  </section>
+</main>
+<script src="{% static 'js/chat.js' %}" defer></script>
+{% endblock %}

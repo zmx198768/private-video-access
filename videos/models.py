@@ -124,10 +124,12 @@ class AccessCode(models.Model):
 
     @classmethod
     def issue(cls, *, video, expires_at, starts_at=None, note="", created_by=None):
+        from .code_registry import code_digest_in_use
+
         for _ in range(20):
             plain = "".join(secrets.choice(CODE_ALPHABET) for _ in range(10))
             digest = digest_access_code(plain)
-            if not cls.objects.filter(code_digest=digest).exists():
+            if not code_digest_in_use(digest):
                 obj = cls.objects.create(
                     video=video,
                     code_digest=digest,
@@ -142,12 +144,14 @@ class AccessCode(models.Model):
 
     @classmethod
     def issue_custom(cls, *, code, video, expires_at, starts_at=None, note="", created_by=None):
+        from .code_registry import code_digest_in_use
+
         plain = normalize_access_code(code)
         if len(plain) != 10:
             raise ValueError("授权码必须为10位英文字母或数字")
         digest = digest_access_code(plain)
-        if cls.objects.filter(code_digest=digest).exists():
-            raise ValueError("该授权码已存在，请更换一个")
+        if code_digest_in_use(digest):
+            raise ValueError("该授权码已被其他内容使用，请更换一个")
         obj = cls.objects.create(
             video=video,
             code_digest=digest,

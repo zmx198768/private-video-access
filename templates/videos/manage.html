@@ -1,20 +1,6 @@
 {% extends "base.html" %}
 {% block title %}管理控制台{% endblock %}
 {% block body %}
-<header class="admin-header">
-  <div>
-    <p class="eyebrow">PRIVATE VIDEO CONTROL</p>
-    <h1>{{ system_name }}</h1>
-    <p class="admin-subtitle">视频共享管理</p>
-  </div>
-  <nav>
-    <a class="button button-small button-primary nav-button" href="{% url 'videos:upload_video' %}">上传视频</a>
-    <a href="{% url 'videos:records' %}">观看记录</a>
-    <a href="{% url 'videos:settings' %}">系统设置</a>
-    <a href="/admin/">系统管理</a>
-    <form method="post" action="/admin/logout/">{% csrf_token %}<button class="link-button">退出</button></form>
-  </nav>
-</header>
 <main class="admin-main">
   {% for message in messages %}<div class="alert alert-success">{{ message }}</div>{% endfor %}
   <section class="summary-grid">

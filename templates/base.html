@@ -10,6 +10,11 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+  {% block staff_navigation %}
+    {% if request.user.is_staff %}
+      {% include "includes/admin_navigation.html" %}
+    {% endif %}
+  {% endblock %}
   {% block body %}{% endblock %}
 </body>
 </html>

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}{{ video.title }} · {{ system_name }}{% endblock %}
+{% block staff_navigation %}{% endblock %}
 {% block head %}
 <script src="{% static 'vendor/hls.js/hls.min.js' %}" defer></script>
 {% endblock %}

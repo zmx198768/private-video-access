@@ -7,6 +7,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 APP_HOST="${APP_HOST:-127.0.0.1}"
+APP_ORIGIN="${APP_ORIGIN:-http://${APP_HOST}}"
 MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
 MYSQL_ROOT_USER="${MYSQL_ROOT_USER:-root}"
@@ -14,6 +15,7 @@ DB_ALLOWED_HOST="${DB_ALLOWED_HOST:-127.0.0.1}"
 REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 REDIS_DB="${REDIS_DB:-4}"
+CHAT_REDIS_DB="${CHAT_REDIS_DB:-5}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 printf "MySQL root password: " >&2
@@ -42,6 +44,7 @@ umask 077
     printf '%s\n' "DJANGO_SECRET_KEY=${DJANGO_SECRET}"
     printf '%s\n' "DJANGO_DEBUG=0"
     printf '%s\n' "DJANGO_ALLOWED_HOSTS=${APP_HOST}"
+    printf '%s\n' "CSRF_TRUSTED_ORIGINS=${APP_ORIGIN}"
     printf '%s\n' "DB_ENGINE=mysql"
     printf '%s\n' "DB_NAME=private_video"
     printf '%s\n' "DB_USER=private_video"
@@ -49,7 +52,9 @@ umask 077
     printf '%s\n' "DB_HOST=${MYSQL_HOST}"
     printf '%s\n' "DB_PORT=${MYSQL_PORT}"
     printf '%s\n' "REDIS_URL=redis://:${REDIS_PASSWORD_URLENCODED}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}"
+    printf '%s\n' "CHAT_REDIS_URL=redis://:${REDIS_PASSWORD_URLENCODED}@${REDIS_HOST}:${REDIS_PORT}/${CHAT_REDIS_DB}"
     printf '%s\n' "USE_REDIS_CACHE=1"
+    printf '%s\n' "USE_REDIS_CHANNEL_LAYER=1"
     printf '%s\n' "VIDEO_SOURCE_DIR=/video"
     printf '%s\n' "VIDEO_HLS_DIR=/var/lib/private-video/hls"
     printf '%s\n' "TRUST_PROXY_HEADERS=1"

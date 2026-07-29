@@ -14,6 +14,7 @@ ALLOWED_HOSTS = [value.strip() for value in os.getenv("DJANGO_ALLOWED_HOSTS", "1
 CSRF_TRUSTED_ORIGINS = [value.strip() for value in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if value.strip()]
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -21,6 +22,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "videos",
+    "chat",
 ]
 
 MIDDLEWARE = [
@@ -52,6 +54,7 @@ TEMPLATES = [
     }
 ]
 WSGI_APPLICATION = "private_video.wsgi.application"
+ASGI_APPLICATION = "private_video.asgi.application"
 
 if os.getenv("DB_ENGINE", "sqlite") == "mysql":
     DATABASES = {
@@ -110,6 +113,7 @@ STREAM_URL_TTL = int(os.getenv("STREAM_URL_TTL", "300"))
 PLAYBACK_SESSION_HOURS = int(os.getenv("PLAYBACK_SESSION_HOURS", "12"))
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+CHAT_REDIS_URL = os.getenv("CHAT_REDIS_URL", REDIS_URL)
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
@@ -129,6 +133,27 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60.0,
     }
 }
+
+if env_bool("USE_REDIS_CHANNEL_LAYER", False):
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [CHAT_REDIS_URL],
+                "prefix": "private-video-chat",
+                "capacity": 500,
+                "expiry": 60,
+            },
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    }
+
+CHAT_MESSAGE_MAX_LENGTH = int(os.getenv("CHAT_MESSAGE_MAX_LENGTH", "2000"))
+CHAT_SEND_RATE_PER_MINUTE = int(os.getenv("CHAT_SEND_RATE_PER_MINUTE", "30"))
+CHAT_ENTRY_RATE_PER_MINUTE = int(os.getenv("CHAT_ENTRY_RATE_PER_MINUTE", "10"))
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"

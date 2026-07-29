@@ -13,6 +13,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from .ip_access import is_ip_blocked
 from .models import (
     AccessCode,
     AdminAuditLog,
@@ -58,6 +59,17 @@ class AccessCodeTests(TestCase):
         self.video.sharing_enabled = False
         self.assertFalse(self.video.is_currently_shared)
 
+    def test_video_code_cannot_duplicate_chat_room_code(self):
+        from chat.models import ChatRoom
+
+        ChatRoom.create_with_code(name="全局唯一性", code="GLOBAL2626")
+        with self.assertRaisesMessage(ValueError, "授权码已被其他内容使用"):
+            AccessCode.issue_custom(
+                code="GLOBAL2626",
+                video=self.video,
+                expires_at=timezone.now() + timezone.timedelta(days=1),
+            )
+
 
 class PlaybackFlowTests(TestCase):
     def setUp(self):
@@ -97,6 +109,37 @@ class PlaybackFlowTests(TestCase):
         response = self.client.post(reverse("videos:authorize"), {"code": "AAAAAAAAAA"})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(SecurityEvent.objects.filter(event_type="invalid_code").count(), 1)
+
+    def test_public_entry_is_unified_and_hides_staff_navigation(self):
+        user = get_user_model().objects.create_user(
+            "entry-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("videos:access"))
+        self.assertContains(response, "私密视频/聊天入口")
+        self.assertContains(response, "视频或聊天室")
+        self.assertNotContains(response, "系统主菜单")
+        self.assertNotContains(response, 'class="system-name"')
+        self.assertNotContains(response, "访问时间和IP地址会被记录")
+
+    def test_watch_page_hides_staff_navigation_after_authorization(self):
+        user = get_user_model().objects.create_user(
+            "watching-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        session, token = PlaybackSession.create_for(
+            self.code,
+            "127.0.0.1",
+            "staff-watch",
+        )
+        self.client.force_login(user)
+        self.client.cookies[f"pv_{str(session.id).replace('-', '')}"] = token
+        response = self.client.get(reverse("videos:watch", args=[session.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "系统主菜单")
 
     def test_fresh_csrf_endpoint_recovers_after_login_rotates_cookie(self):
         user = get_user_model().objects.create_user("csrf-admin", password="strong-test-password", is_staff=True)
@@ -180,6 +223,24 @@ class ScannerTests(TestCase):
 
 
 class ManagementTests(TestCase):
+    def test_primary_management_pages_do_not_render_legacy_hero_header(self):
+        user = get_user_model().objects.create_user(
+            "compact-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        for url_name in (
+            "videos:manage",
+            "videos:records",
+            "videos:settings",
+            "chat:manage",
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, 'class="admin-header"')
+
     def test_staff_can_create_multiple_codes_and_creation_enables_sharing(self):
         user = get_user_model().objects.create_user("admin", password="strong-test-password", is_staff=True)
         self.client.force_login(user)
@@ -315,7 +376,7 @@ class ManagementTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "该授权码已使用过")
+        self.assertContains(response, "该授权码已被其他内容使用")
         self.assertEqual(video.access_codes.count(), 1)
 
     def test_view_records_are_paginated(self):
@@ -414,7 +475,7 @@ class ManagementTests(TestCase):
             self.assertFalse(Video.objects.filter(title="错误格式").exists())
             self.assertEqual(list(Path(directory).iterdir()), [])
 
-    def test_staff_can_update_system_name_and_it_appears_on_public_page(self):
+    def test_staff_can_update_system_name_without_exposing_it_on_public_entry(self):
         user = get_user_model().objects.create_user("settings-admin", password="strong-test-password", is_staff=True)
         self.client.force_login(user)
         response = self.client.post(
@@ -431,7 +492,8 @@ class ManagementTests(TestCase):
 
         self.client.logout()
         response = self.client.get(reverse("videos:access"))
-        self.assertContains(response, "星河视频中心")
+        self.assertNotContains(response, "星河视频中心")
+        self.assertContains(response, "私密视频/聊天入口")
 
     def test_staff_can_update_ip_blacklist_with_regular_expressions(self):
         user = get_user_model().objects.create_user(
@@ -481,7 +543,7 @@ class ManagementTests(TestCase):
             REMOTE_ADDR="192.0.2.11",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "正则表达式无效")
+        self.assertContains(response, "规则无效")
         self.assertEqual(SystemSettings.load().ip_blacklist, "")
 
     def test_ip_blacklist_prevents_locking_current_admin_ip(self):
@@ -559,6 +621,27 @@ class ManagementTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_ip_blacklist_accepts_plain_ip_and_wildcard_without_escaping(self):
+        user = get_user_model().objects.create_user(
+            "friendly-blacklist-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("videos:settings"),
+            {
+                "action": "ip_blacklist",
+                "network-ip_blacklist": "203.0.113.25\n198.51.100.*",
+            },
+            REMOTE_ADDR="192.0.2.10",
+        )
+        self.assertRedirects(response, reverse("videos:settings"))
+        blacklist = SystemSettings.load().ip_blacklist
+        self.assertTrue(is_ip_blocked("203.0.113.25", blacklist))
+        self.assertTrue(is_ip_blocked("198.51.100.88", blacklist))
+        self.assertFalse(is_ip_blocked("198.51.101.88", blacklist))
+
     def test_staff_can_change_password_without_losing_session(self):
         user = get_user_model().objects.create_user("password-admin", password="old-strong-password", is_staff=True)
         self.client.force_login(user)
@@ -578,12 +661,51 @@ class ManagementTests(TestCase):
         self.assertTrue(user.check_password("N7!river-Moon-Quartz-2026"))
         self.assertEqual(self.client.get(reverse("videos:settings")).status_code, 200)
 
-    def test_django_admin_has_return_to_console_link(self):
+    def test_django_admin_has_primary_system_menu(self):
         user = get_user_model().objects.create_superuser("super-admin", password="strong-test-password")
         self.client.force_login(user)
         response = self.client.get("/admin/")
-        self.assertContains(response, "返回控制台")
+        self.assertContains(response, "私密视频")
+        self.assertContains(response, "私密聊天")
+        self.assertContains(response, "系统设置")
+        self.assertContains(response, "系统管理")
+
+    def test_staff_pages_have_two_level_primary_navigation(self):
+        user = get_user_model().objects.create_user(
+            "menu-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("videos:manage"))
+        self.assertContains(response, "系统主菜单")
+        self.assertContains(response, "私密视频")
+        self.assertContains(response, "私密聊天")
+        self.assertContains(response, "系统设置")
+        self.assertContains(response, "系统管理")
+        self.assertContains(response, "视频共享控制台")
+        self.assertContains(response, "聊天室管理")
+        self.assertContains(response, "聊天参与记录")
+        self.assertContains(response, 'class="system-nav-direct')
+        self.assertNotContains(response, "<summary>系统设置</summary>", html=False)
+        self.assertContains(response, 'name="system-menu"')
+        self.assertContains(response, "js/admin-navigation.js")
+        self.assertNotContains(response, 'class="admin-header"')
+
+    def test_settings_page_uses_friendly_ip_rule_examples(self):
+        user = get_user_model().objects.create_user(
+            "settings-layout-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("videos:settings"))
+        self.assertContains(response, "整个系统的名称")
+        self.assertContains(response, "203.0.113.25")
+        self.assertContains(response, "198.51.100.*")
+        self.assertNotContains(response, r"^203\.0\.113\.25$")
         self.assertContains(response, reverse("videos:manage"))
+        self.assertContains(response, "identity-name-field")
 
     def test_dashboard_displays_video_upload_time(self):
         user = get_user_model().objects.create_user("time-admin", password="strong-test-password", is_staff=True)

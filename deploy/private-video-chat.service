@@ -1,0 +1,19 @@
+[Unit]
+Description=Private Video Chat Daphne
+After=network.target mysqld.service redis.service
+
+[Service]
+Type=simple
+User=privatevideo
+Group=privatevideo
+WorkingDirectory=/opt/private-video
+EnvironmentFile=/etc/private-video.env
+ExecStart=/opt/private-video/.venv/bin/daphne -b 127.0.0.1 -p 8009 --ping-interval 25 --ping-timeout 10 --websocket-max-message-size 65536 private_video.asgi:application
+Restart=always
+RestartSec=3
+UMask=0027
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

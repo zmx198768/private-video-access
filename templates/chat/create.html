@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{% if rotating %}更换聊天室授权码{% else %}创建聊天室{% endif %}{% endblock %}
+{% block body %}
+<main class="code-page">
+  <header class="code-page-header">
+    <a class="back-link" href="{% url 'chat:manage' %}"><span aria-hidden="true">←</span> 返回聊天室管理</a>
+    <span class="header-step">{% if rotating %}更新访问凭据{% else %}创建私密空间{% endif %}</span>
+  </header>
+  <div class="code-create-layout">
+    <section class="code-form-panel">
+      <p class="section-kicker">CHAT ACCESS CONTROL</p>
+      <h1>{% if rotating %}更换聊天室授权码{% else %}创建私密聊天室{% endif %}</h1>
+      <p class="lead">{% if rotating %}新授权码创建后，旧授权码和现有访客会话立即失效。{% else %}按照视频分享授权码相同的安全逻辑，设置聊天室信息并生成一次性展示的10位访问凭证。{% endif %}</p>
+
+      {% if rotating %}
+        <div class="selected-video selected-chat-room">
+          <div class="video-glyph" aria-hidden="true">#</div>
+          <div class="selected-video-copy">
+            <span>当前聊天室</span>
+            <strong>{{ room.name }}</strong>
+            <small>当前授权码 ******{{ room.code_hint }} · 昵称组《{{ room.nickname_group_label }}》</small>
+          </div>
+          <span class="status {% if room.is_active %}status-live{% else %}status-off{% endif %}">{% if room.is_active %}正在开放{% else %}已经关闭{% endif %}</span>
+        </div>
+      {% endif %}
+
+      {% for error in form.non_field_errors %}<div class="alert alert-error">{{ error }}</div>{% endfor %}
+      <form method="post" class="code-form" novalidate>
+        {% csrf_token %}
+
+        {% if not rotating %}
+        <fieldset class="form-section">
+          <legend><span class="legend-number">01</span> 聊天室信息</legend>
+          <p class="form-section-help">名称用于管理和访客页面；每个聊天室使用一部小说的人物作为备用昵称。</p>
+          <div class="form-grid form-grid-two">
+            <div class="field-group">
+              <label for="{{ form.name.id_for_label }}">聊天室名称 <em>必填</em></label>
+              {{ form.name }}
+              <span class="field-help">例如：项目讨论组、客户答疑室</span>
+              {% for error in form.name.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field-group">
+              <label for="{{ form.nickname_group.id_for_label }}">备用昵称组</label>
+              {{ form.nickname_group }}
+              <span class="field-help">系统随机或指定一部小说，参与者依次获得不同人物昵称</span>
+              {% for error in form.nickname_group.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </fieldset>
+        {% endif %}
+
+        <fieldset class="form-section">
+          <legend><span class="legend-number">{% if rotating %}01{% else %}02{% endif %}</span> 授权码设置</legend>
+          <p class="form-section-help">随机模式使用密码学安全随机数；手工模式需要填写10位英文字母或数字。</p>
+          <div class="code-mode-switch" role="radiogroup" aria-label="授权码生成方式">
+            <label class="code-mode-card">
+              <input type="radio" name="code_mode" value="auto" {% if form.code_mode.value != "manual" %}checked{% endif %}>
+              <span><strong>自动生成</strong><small>安全随机生成10位授权码</small></span>
+            </label>
+            <label class="code-mode-card">
+              <input type="radio" name="code_mode" value="manual" {% if form.code_mode.value == "manual" %}checked{% endif %}>
+              <span><strong>手工设置</strong><small>自行指定一个10位授权码</small></span>
+            </label>
+          </div>
+          {% for error in form.code_mode.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <div class="field-group chat-manual-code-field" data-manual-code-field hidden>
+            <label for="{{ form.custom_code.id_for_label }}">自定义授权码 <em>必填</em></label>
+            {{ form.custom_code }}
+            <span class="field-help">不区分大小写，只允许英文字母或数字</span>
+            {% for error in form.custom_code.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="form-actions">
+          <a class="button button-ghost" href="{% url 'chat:manage' %}">取消</a>
+          <button class="button button-primary create-code-button" type="submit">
+            <span aria-hidden="true">＋</span> {% if rotating %}更换授权码{% else %}创建并生成授权码{% endif %}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="code-info-panel">
+      <div class="info-icon" aria-hidden="true">10</div>
+      <h2>与视频授权一致的保护逻辑</h2>
+      <p>完整授权码只显示一次，数据库只保存HMAC摘要和末4位。</p>
+      <ul class="security-list">
+        <li><span>✓</span><div><strong>手工或随机</strong><small>两种方式都检查格式和唯一性</small></div></li>
+        <li><span>✓</span><div><strong>多人实时聊天</strong><small>同一授权码允许多人同时进入</small></div></li>
+        <li><span>✓</span><div><strong>独立人物昵称</strong><small>每位参与者自动获得不同备用昵称</small></div></li>
+        <li><span>✓</span><div><strong>更换立即失效</strong><small>旧授权码和现有会话会被撤销</small></div></li>
+      </ul>
+      <div class="info-note"><span aria-hidden="true">!</span><p>创建后请立即复制授权码，离开结果页后无法恢复明文。</p></div>
+    </aside>
+  </div>
+</main>
+<script>
+(() => {
+  const modeInputs = document.querySelectorAll('input[name="code_mode"]');
+  const manualField = document.querySelector("[data-manual-code-field]");
+  const customCodeInput = document.getElementById("{{ form.custom_code.id_for_label }}");
+  const updateCodeMode = () => {
+    const manual = document.querySelector('input[name="code_mode"]:checked')?.value === "manual";
+    manualField.hidden = !manual;
+    customCodeInput.required = manual;
+    document.querySelectorAll(".code-mode-card").forEach((card) => {
+      card.classList.toggle("active", card.querySelector("input").checked);
+    });
+  };
+  modeInputs.forEach((input) => input.addEventListener("change", updateCodeMode));
+  customCodeInput.addEventListener("input", () => {
+    customCodeInput.value = customCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+  });
+  updateCodeMode();
+})();
+</script>
+{% endblock %}

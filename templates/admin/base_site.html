@@ -19,6 +19,7 @@
     white-space: nowrap;
   }
   .control-console-link:hover { border-color: var(--accent); color: var(--accent); }
+  .admin-primary-menu { display: flex; flex-wrap: wrap; gap: 7px; }
 </style>
 {% endblock %}
 
@@ -27,5 +28,10 @@
 {% endblock %}
 
 {% block nav-global %}
-<a class="control-console-link" href="{% url 'videos:manage' %}">← 返回控制台</a>
+<nav class="admin-primary-menu" aria-label="系统一级菜单">
+  <a class="control-console-link" href="{% url 'videos:manage' %}">私密视频</a>
+  <a class="control-console-link" href="{% url 'chat:manage' %}">私密聊天</a>
+  <a class="control-console-link" href="{% url 'videos:settings' %}">系统设置</a>
+  <a class="control-console-link" href="{% url 'admin:index' %}">系统管理</a>
+</nav>
 {% endblock %}

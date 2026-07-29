@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}聊天室管理{% endblock %}
+{% block body %}
+<main class="admin-main">
+  {% for message in messages %}<div class="alert alert-success">{{ message }}</div>{% endfor %}
+  <section class="summary-grid">
+    <div class="metric"><span>聊天室总数</span><strong>{{ room_count }}</strong></div>
+    <div class="metric"><span>正在开放</span><strong>{{ active_room_count }}</strong></div>
+    <div class="metric"><span>统一访问入口</span><strong><a href="{% url 'videos:access' %}">/</a></strong></div>
+  </section>
+  <section class="panel">
+    <div class="panel-heading">
+      <div><h2>聊天室列表</h2><p>完整授权码不会保存在数据库中，更换授权码会让现有会话立即失效。</p></div>
+    </div>
+    {% if page_obj.object_list %}
+      <div class="video-list">
+      {% for room in page_obj.object_list %}
+        <article class="video-card">
+          <div class="video-topline">
+            <div>
+              <h3>{{ room.name }}</h3>
+              <p class="file-meta">授权码 ******{{ room.code_hint }} · 昵称组《{{ room.nickname_group_label }}》 · {{ room.participant_count }} 位访客 · {{ room.message_count }} 条消息</p>
+              <p class="file-meta upload-time">创建时间：{{ room.created_at|date:"Y-m-d H:i:s" }}{% if room.last_message_at %} · 最后消息：{{ room.last_message_at|date:"Y-m-d H:i:s" }}{% endif %}</p>
+            </div>
+            <span class="status {% if room.is_active %}status-live{% else %}status-off{% endif %}">
+              {% if room.is_active %}正在开放{% else %}已经关闭{% endif %}
+            </span>
+          </div>
+          <div class="actions">
+            <a class="button button-small" href="{% url 'chat:rotate_code' room.id %}">更换授权码</a>
+            <a class="button button-small" href="{% url 'chat:message_records' room.id %}">查看聊天记录</a>
+            <form method="post" action="{% url 'chat:toggle' room.id %}">
+              {% csrf_token %}
+              <button class="button button-small {% if room.is_active %}button-danger{% endif %}" type="submit">
+                {% if room.is_active %}关闭聊天室{% else %}重新开放{% endif %}
+              </button>
+            </form>
+          </div>
+        </article>
+      {% endfor %}
+      </div>
+      {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="pagination" aria-label="聊天室分页">
+          {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">上一页</a>{% else %}<span class="disabled">上一页</span>{% endif %}
+          {% for page_number in page_range %}
+            {% if page_number == page_obj.paginator.ELLIPSIS %}
+              <span class="ellipsis">{{ page_number }}</span>
+            {% elif page_number == page_obj.number %}
+              <span class="current">{{ page_number }}</span>
+            {% else %}
+              <a href="?page={{ page_number }}">{{ page_number }}</a>
+            {% endif %}
+          {% endfor %}
+          {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">下一页</a>{% else %}<span class="disabled">下一页</span>{% endif %}
+        </nav>
+      {% endif %}
+    {% else %}
+      <div class="empty-state"><h3>还没有聊天室</h3><p>创建聊天室后，将只显示一次完整授权码。</p></div>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

@@ -1,4 +1,7 @@
 Django==5.2.5
+channels==4.3.2
+channels-redis==4.3.0
+daphne==4.2.3
 celery==5.5.3
 redis==6.4.0
 mysqlclient==2.2.7

@@ -1,27 +1,42 @@
 {% extends "base.html" %}
 {% block title %}系统设置 · {{ system_name }}{% endblock %}
 {% block body %}
-<header class="admin-header">
-  <div>
-    <p class="eyebrow">SYSTEM SETTINGS</p>
-    <h1>系统设置</h1>
-    <p class="admin-subtitle">{{ system_name }}</p>
-  </div>
-  <nav>
-    <a class="button button-small" href="{% url 'videos:manage' %}">返回管理控制台</a>
-  </nav>
-</header>
 <main class="admin-main settings-main">
   {% for message in messages %}
     <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ message }}</div>
   {% endfor %}
+
   <div class="settings-grid">
-    <section class="settings-card settings-card-wide">
+    <section id="system-identity" class="settings-card settings-card-wide identity-settings-card">
+      <div class="settings-card-heading">
+        <span class="settings-icon" aria-hidden="true">A</span>
+        <div>
+          <h2>整个系统的名称</h2>
+          <p>统一用于视频授权、私密聊天、控制台、浏览器标题和系统管理后台。</p>
+        </div>
+      </div>
+      <form method="post" class="settings-form settings-form-horizontal" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="system_name">
+        <div class="field-group identity-name-field">
+          <label for="{{ name_form.system_name.id_for_label }}">整个系统的名称</label>
+          {{ name_form.system_name }}
+          {% for error in name_form.system_name.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <p class="settings-meta">
+            上次修改：{{ settings_obj.updated_at|date:"Y-m-d H:i:s" }}
+            {% if settings_obj.updated_by %} · {{ settings_obj.updated_by.username }}{% endif %}
+          </p>
+        </div>
+        <button class="button button-primary" type="submit">保存系统名称</button>
+      </form>
+    </section>
+
+    <section id="ip-blacklist" class="settings-card settings-card-network">
       <div class="settings-card-heading">
         <span class="settings-icon network-icon" aria-hidden="true">IP</span>
         <div>
           <h2>IP黑名单</h2>
-          <p>命中任一规则的客户端IP将无法访问系统，规则按完整IP进行正则匹配。</p>
+          <p>每行填写一个完整IP或带星号的范围，不需要反斜杠、起始符或结束符。</p>
         </div>
       </div>
       <form method="post" class="settings-form" novalidate>
@@ -34,51 +49,27 @@
           </label>
           {{ blacklist_form.ip_blacklist }}
           {% for error in blacklist_form.ip_blacklist.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
-          <p class="field-help">
-            使用完整匹配。例如单个IP：
-            <code>^203\.0\.113\.25$</code>；
-            一个IPv4网段：
-            <code>^198\.51\.100\.\d{1,3}$</code>。
-          </p>
+          <div class="friendly-rule-examples">
+            <div><span>单个IP</span><code>203.0.113.25</code></div>
+            <div><span>整个范围</span><code>198.51.100.*</code></div>
+            <div><span>IPv6</span><code>2001:db8:*</code></div>
+          </div>
+          <p class="field-help">系统仍兼容之前保存的正则表达式，但新增规则直接按上述格式填写即可。</p>
         </div>
         <div class="network-status">
           <span>当前管理IP</span>
           <code>{{ request_ip|default:"无法识别" }}</code>
-          <p>系统不会保存会命中当前管理IP的规则，以避免管理员被意外锁定。</p>
+          <p>为避免管理员误锁定自己，命中当前管理IP的规则无法保存。</p>
         </div>
         <button class="button button-primary" type="submit">保存IP黑名单</button>
       </form>
     </section>
 
-    <section class="settings-card">
-      <div class="settings-card-heading">
-        <span class="settings-icon" aria-hidden="true">A</span>
-        <div>
-          <h2>系统名称</h2>
-          <p>用于公开授权页、管理控制台、浏览器标题和系统后台。</p>
-        </div>
-      </div>
-      <form method="post" class="settings-form" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="action" value="system_name">
-        <div class="field-group">
-          <label for="{{ name_form.system_name.id_for_label }}">系统名称</label>
-          {{ name_form.system_name }}
-          {% for error in name_form.system_name.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
-        </div>
-        <p class="settings-meta">
-          上次修改：{{ settings_obj.updated_at|date:"Y-m-d H:i:s" }}
-          {% if settings_obj.updated_by %} · {{ settings_obj.updated_by.username }}{% endif %}
-        </p>
-        <button class="button button-primary" type="submit">保存系统名称</button>
-      </form>
-    </section>
-
-    <section class="settings-card">
+    <section id="admin-password" class="settings-card">
       <div class="settings-card-heading">
         <span class="settings-icon lock-icon" aria-hidden="true">●</span>
         <div>
-          <h2>修改管理员密码</h2>
+          <h2>管理员密码</h2>
           <p>修改当前账号“{{ request.user.username }}”的登录密码。</p>
         </div>
       </div>
@@ -97,7 +88,7 @@
         {% for error in password_form.non_field_errors %}<p class="field-error">{{ error }}</p>{% endfor %}
         <div class="password-warning">
           <span aria-hidden="true">!</span>
-          <p>修改后请妥善保存新密码。系统不会在页面或数据库中保存密码明文。</p>
+          <p>修改后请妥善保存新密码。系统不会保存密码明文。</p>
         </div>
         <button class="button button-primary" type="submit">修改登录密码</button>
       </form>

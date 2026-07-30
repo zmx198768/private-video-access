@@ -10,7 +10,7 @@
   </section>
   <section class="panel">
     <div class="panel-heading">
-      <div><h2>聊天室列表</h2><p>完整授权码不会保存在数据库中，更换授权码会让现有会话立即失效。</p></div>
+      <div><h2>聊天室列表</h2><p>管理员可查看完整授权码；授权码以加密形式保存，更换后现有会话立即失效。</p></div>
     </div>
     {% if page_obj.object_list %}
       <div class="video-list">
@@ -19,7 +19,12 @@
           <div class="video-topline">
             <div>
               <h3>{{ room.name }}</h3>
-              <p class="file-meta">授权码 ******{{ room.code_hint }} · 昵称组《{{ room.nickname_group_label }}》 · {{ room.participant_count }} 位访客 · {{ room.message_count }} 条消息</p>
+              <p class="file-meta">授权码
+                {% with plain=room.revealed_code %}
+                  {% if plain %}<span class="mono">{{ plain }}</span>{% else %}<span class="legacy-code">历史码不可恢复（尾号 {{ room.code_hint }}）</span>{% endif %}
+                {% endwith %}
+                · 昵称组《{{ room.nickname_group_label }}》 · {{ room.participant_count }} 位访客 · {{ room.message_count }} 条消息
+              </p>
               <p class="file-meta upload-time">创建时间：{{ room.created_at|date:"Y-m-d H:i:s" }}{% if room.last_message_at %} · 最后消息：{{ room.last_message_at|date:"Y-m-d H:i:s" }}{% endif %}</p>
             </div>
             <span class="status {% if room.is_active %}status-live{% else %}status-off{% endif %}">
@@ -55,7 +60,7 @@
         </nav>
       {% endif %}
     {% else %}
-      <div class="empty-state"><h3>还没有聊天室</h3><p>创建聊天室后，将只显示一次完整授权码。</p></div>
+      <div class="empty-state"><h3>还没有聊天室</h3><p>创建聊天室后，可在管理端随时查看完整授权码。</p></div>
     {% endif %}
   </section>
 </main>

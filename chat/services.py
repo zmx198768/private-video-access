@@ -27,6 +27,12 @@ def serialize_message(message):
     return {
         "id": message.id,
         "body": message.body,
+        "image": {
+            "present": message.has_image,
+            "width": message.image_width,
+            "height": message.image_height,
+            "size": message.image_size,
+        },
         "created_at": timezone.localtime(message.created_at).isoformat(),
         "participant": {
             "id": str(participant.id) if participant else "",

@@ -26,6 +26,7 @@ printf "\n" >&2
 
 DB_APP_PASSWORD="$(openssl rand -hex 24)"
 DJANGO_SECRET="$(openssl rand -hex 48)"
+ACCESS_CODE_ENCRYPTION_KEY="$(openssl rand -hex 48)"
 ADMIN_PASSWORD="$(openssl rand -hex 12)"
 REDIS_PASSWORD_URLENCODED="$("$PYTHON_BIN" -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$REDIS_PASSWORD")"
 
@@ -42,6 +43,7 @@ unset MYSQL_PWD MYSQL_ROOT_PASSWORD
 umask 077
 {
     printf '%s\n' "DJANGO_SECRET_KEY=${DJANGO_SECRET}"
+    printf '%s\n' "ACCESS_CODE_ENCRYPTION_KEY=${ACCESS_CODE_ENCRYPTION_KEY}"
     printf '%s\n' "DJANGO_DEBUG=0"
     printf '%s\n' "DJANGO_ALLOWED_HOSTS=${APP_HOST}"
     printf '%s\n' "CSRF_TRUSTED_ORIGINS=${APP_ORIGIN}"
@@ -55,6 +57,11 @@ umask 077
     printf '%s\n' "CHAT_REDIS_URL=redis://:${REDIS_PASSWORD_URLENCODED}@${REDIS_HOST}:${REDIS_PORT}/${CHAT_REDIS_DB}"
     printf '%s\n' "USE_REDIS_CACHE=1"
     printf '%s\n' "USE_REDIS_CHANNEL_LAYER=1"
+    printf '%s\n' "CHAT_IDENTITY_DAYS=30"
+    printf '%s\n' "CHAT_IMAGE_DIR=/var/lib/private-video/chat-images"
+    printf '%s\n' "CHAT_IMAGE_MAX_BYTES=8388608"
+    printf '%s\n' "CHAT_IMAGE_MAX_PIXELS=25000000"
+    printf '%s\n' "CHAT_IMAGE_MAX_DIMENSION=4096"
     printf '%s\n' "VIDEO_SOURCE_DIR=/video"
     printf '%s\n' "VIDEO_HLS_DIR=/var/lib/private-video/hls"
     printf '%s\n' "TRUST_PROXY_HEADERS=1"
@@ -70,5 +77,5 @@ umask 077
 
 chmod 600 /etc/private-video.env /root/private-video-admin.txt
 redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" --no-auth-warning ping >/dev/null
-unset REDIS_PASSWORD REDIS_PASSWORD_URLENCODED DB_APP_PASSWORD DJANGO_SECRET ADMIN_PASSWORD
+unset REDIS_PASSWORD REDIS_PASSWORD_URLENCODED DB_APP_PASSWORD DJANGO_SECRET ACCESS_CODE_ENCRYPTION_KEY ADMIN_PASSWORD
 echo "CONFIGURED"

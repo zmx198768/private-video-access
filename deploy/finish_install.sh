@@ -20,6 +20,7 @@ SQL
 fi
 
 cd /opt/private-video
+install -d -o privatevideo -g privatevideo -m 0750 /var/lib/private-video/chat-images
 chmod 700 deploy/configure_secrets.sh deploy/finish_install.sh deploy/smoke_test.sh
 /opt/private-video/.venv/bin/python manage.py migrate --noinput
 /opt/private-video/.venv/bin/python manage.py collectstatic --noinput

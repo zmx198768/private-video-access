@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}授权码已生成 · {{ video.title }}{% endblock %}
 {% block body %}
 <main class="issued-page">
@@ -12,7 +13,7 @@
       <span aria-hidden="true">!</span>
       <div>
         <strong>这是唯一一次完整显示</strong>
-        <p>离开本页后只能看到授权码尾号，请立即复制并妥善保存。</p>
+        <p>管理员之后仍可在视频管理页面查看完整授权码，请妥善保管。</p>
       </div>
     </div>
 
@@ -39,24 +40,14 @@
     <p id="copy-feedback" class="copy-feedback" aria-live="polite"></p>
   </section>
 </main>
+<script src="{% static 'js/clipboard.js' %}"></script>
 <script>
 (() => {
   const codes = JSON.parse(document.getElementById("issued-code-data").textContent);
   const feedback = document.getElementById("copy-feedback");
   const copy = async (value, message) => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const area = document.createElement("textarea");
-        area.value = value;
-        area.style.position = "fixed";
-        area.style.opacity = "0";
-        document.body.appendChild(area);
-        area.select();
-        if (!document.execCommand("copy")) throw new Error("copy failed");
-        area.remove();
-      }
+      await window.copyTextWithFallback(value);
       feedback.textContent = message;
     } catch (_error) {
       feedback.textContent = "复制失败，请手动选择授权码复制。";

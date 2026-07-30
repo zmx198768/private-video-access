@@ -24,10 +24,20 @@ class VideoAdmin(admin.ModelAdmin):
 
 @admin.register(AccessCode)
 class AccessCodeAdmin(admin.ModelAdmin):
-    list_display = ("video", "code_hint", "state", "starts_at", "expires_at", "created_at")
+    list_display = ("video", "full_authorization_code", "state", "starts_at", "expires_at", "created_at")
     list_filter = ("enabled", "starts_at", "expires_at")
     search_fields = ("video__title", "code_hint", "note")
-    readonly_fields = ("code_digest", "code_hint", "created_by", "created_at")
+    readonly_fields = (
+        "full_authorization_code",
+        "code_digest",
+        "code_hint",
+        "created_by",
+        "created_at",
+    )
+
+    @admin.display(description="完整授权码")
+    def full_authorization_code(self, obj):
+        return obj.revealed_code or f"历史码不可恢复（尾号 {obj.code_hint}）"
 
     @admin.display(description="状态")
     def state(self, obj):

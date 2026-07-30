@@ -17,7 +17,11 @@
         {% for session in page_obj %}
           <tr>
             <td>{{ session.access_code.video.title }}</td>
-            <td class="mono">******{{ session.access_code.code_hint }}</td>
+            <td class="mono">
+              {% with plain=session.access_code.revealed_code %}
+                {% if plain %}{{ plain }}{% else %}<span class="legacy-code">历史码不可恢复（尾号 {{ session.access_code.code_hint }}）</span>{% endif %}
+              {% endwith %}
+            </td>
             <td class="mono">{{ session.ip_address|default:"—" }}</td>
             <td>{{ session.authorized_at|date:"Y-m-d H:i:s" }}</td>
             <td>{{ session.started_at|date:"Y-m-d H:i:s"|default:"—" }}</td>

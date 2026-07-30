@@ -1,4 +1,12 @@
 (() => {
+  const EMOJI_LIST = [
+    "😀", "😄", "😁", "😂", "🤣", "😊", "😍", "🥰",
+    "😘", "😎", "🤔", "🤗", "🤭", "😅", "🥹", "😭",
+    "😡", "😴", "🙄", "😮", "👍", "👎", "👏", "🙌",
+    "🙏", "💪", "🤝", "👌", "✌️", "❤️", "💔", "💯",
+    "🔥", "🎉", "✨", "🌹", "🌟", "☕", "🍻", "🎂",
+    "🎁", "🚀", "💡", "✅", "❌", "⚠️", "📌", "👀"
+  ];
   const app = document.getElementById("chat-app");
   if (!app) return;
 
@@ -7,6 +15,11 @@
   const loadOlderButton = document.getElementById("chat-load-older");
   const form = document.getElementById("chat-compose");
   const bodyInput = document.getElementById("chat-body");
+  const sendButton = document.getElementById("chat-send");
+  const emojiToggle = document.getElementById("chat-emoji-toggle");
+  const emojiPicker = document.getElementById("chat-emoji-picker");
+  const imageInput = document.getElementById("chat-image-input");
+  const imageLabel = document.getElementById("chat-image-label");
   const connection = document.getElementById("chat-connection");
   const errorBox = document.getElementById("chat-error");
   const currentParticipantId = app.dataset.participantId;
@@ -22,6 +35,7 @@
   const newestId = () => messageNodes().at(-1)?.dataset.messageId || null;
   const hasMessage = (id) => Boolean(list.querySelector(`[data-message-id="${id}"]`));
   const nearBottom = () => scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 100;
+  const messageImageUrl = (messageId) => `${app.dataset.imageBaseUrl}image/${messageId}/`;
 
   function setConnection(text, state) {
     connection.textContent = text;
@@ -56,9 +70,27 @@
       month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"
     });
     meta.append(name, ip, time);
-    const text = document.createElement("p");
-    text.textContent = message.body;
-    content.append(meta, text);
+    content.append(meta);
+    if (message.image?.present) {
+      const imageLink = document.createElement("a");
+      imageLink.className = "chat-message-image";
+      imageLink.href = messageImageUrl(message.id);
+      imageLink.target = "_blank";
+      imageLink.rel = "noopener";
+      const image = document.createElement("img");
+      image.src = imageLink.href;
+      image.alt = `由${message.participant.display_name}发送的聊天图片`;
+      image.loading = "lazy";
+      image.width = message.image.width;
+      image.height = message.image.height;
+      imageLink.append(image);
+      content.append(imageLink);
+    }
+    if (message.body) {
+      const text = document.createElement("p");
+      text.textContent = message.body;
+      content.append(text);
+    }
     article.append(avatar, content);
     prepend ? list.prepend(article) : list.append(article);
   }
@@ -132,7 +164,9 @@
         intentionallyClosed = true;
         setConnection(payload.message, "offline");
         bodyInput.disabled = true;
-        form.querySelector("button").disabled = true;
+        sendButton.disabled = true;
+        emojiToggle.disabled = true;
+        imageInput.disabled = true;
       }
     });
 
@@ -142,7 +176,9 @@
         intentionallyClosed = true;
         setConnection("会话已失效，请重新输入授权码", "offline");
         bodyInput.disabled = true;
-        form.querySelector("button").disabled = true;
+        sendButton.disabled = true;
+        emojiToggle.disabled = true;
+        imageInput.disabled = true;
         return;
       }
       setConnection("连接中断，正在重连…", "offline");
@@ -171,10 +207,73 @@
     bodyInput.focus();
   });
 
+  function insertEmoji(emoji) {
+    const start = bodyInput.selectionStart;
+    const end = bodyInput.selectionEnd;
+    const available = bodyInput.maxLength - (bodyInput.value.length - (end - start));
+    const insertion = emoji.slice(0, Math.max(0, available));
+    bodyInput.setRangeText(insertion, start, end, "end");
+    bodyInput.focus();
+  }
+
+  EMOJI_LIST.forEach((emoji) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = emoji;
+    button.setAttribute("aria-label", `插入表情 ${emoji}`);
+    button.addEventListener("click", () => insertEmoji(emoji));
+    emojiPicker.append(button);
+  });
+
+  emojiToggle.addEventListener("click", () => {
+    const opening = emojiPicker.hidden;
+    emojiPicker.hidden = !opening;
+    emojiToggle.setAttribute("aria-expanded", String(opening));
+  });
+  document.addEventListener("click", (event) => {
+    if (!emojiPicker.hidden && !emojiPicker.contains(event.target) && !emojiToggle.contains(event.target)) {
+      emojiPicker.hidden = true;
+      emojiToggle.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  async function uploadImage(file) {
+    if (!file || intentionallyClosed) return;
+    imageInput.disabled = true;
+    imageLabel.dataset.uploading = "true";
+    errorBox.textContent = "图片上传中…";
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const response = await fetch(app.dataset.uploadUrl, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value,
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "图片上传失败");
+      renderMessage(payload.message);
+      scroll.scrollTop = scroll.scrollHeight;
+      errorBox.textContent = "";
+    } catch (error) {
+      errorBox.textContent = error.message;
+    } finally {
+      imageInput.value = "";
+      imageInput.disabled = false;
+      delete imageLabel.dataset.uploading;
+    }
+  }
+
+  imageInput.addEventListener("change", () => uploadImage(imageInput.files[0]));
+
   bodyInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      form.requestSubmit();
+      form.requestSubmit(sendButton);
     }
   });
   loadOlderButton.addEventListener("click", loadOlder);

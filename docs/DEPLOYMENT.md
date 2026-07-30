@@ -21,6 +21,7 @@
 | 应用代码 | `/opt/private-video` |
 | 原视频 | `/video` |
 | HLS | `/var/lib/private-video/hls` |
+| 聊天图片 | `/var/lib/private-video/chat-images` |
 | 应用环境 | `/etc/private-video.env` |
 | 初始管理员凭据 | `/root/private-video-admin.txt` |
 
@@ -33,6 +34,7 @@ useradd --system --home /opt/private-video --shell /usr/sbin/nologin privatevide
 install -d -o privatevideo -g privatevideo -m 0750 /opt/private-video
 install -d -o privatevideo -g privatevideo -m 0750 /video
 install -d -o privatevideo -g privatevideo -m 0750 /var/lib/private-video/hls
+install -d -o privatevideo -g privatevideo -m 0750 /var/lib/private-video/chat-images
 ```
 
 将代码放入 `/opt/private-video`。不要复制本地 `.venv`、SQLite数据库、日志或测试媒体。
@@ -103,6 +105,7 @@ install -m 0600 deploy/private-video.env.example /etc/private-video.env
 | 变量 | 说明 |
 | --- | --- |
 | `DJANGO_SECRET_KEY` | 长随机密钥，生产环境必须更换 |
+| `ACCESS_CODE_ENCRYPTION_KEY` | 授权码管理端回显加密密钥；必须独立生成、稳定保存并随配置备份 |
 | `DJANGO_ALLOWED_HOSTS` | 允许访问的域名或主机，逗号分隔 |
 | `CSRF_TRUSTED_ORIGINS` | 带协议的可信来源，例如 `https://video.example.com` |
 | `DB_*` | MySQL 8连接参数 |
@@ -119,8 +122,22 @@ install -m 0600 deploy/private-video.env.example /etc/private-video.env
 | `CHAT_MESSAGE_MAX_LENGTH` | 单条消息最大长度，默认2000 |
 | `CHAT_SEND_RATE_PER_MINUTE` | 每个参与者每分钟发送上限，默认30 |
 | `CHAT_ENTRY_RATE_PER_MINUTE` | 每个IP每分钟进入聊天室上限，默认10 |
+| `CHAT_IDENTITY_DAYS` | 聊天临时身份Cookie保留天数，默认30 |
+| `CHAT_IMAGE_DIR` | 受保护聊天图片目录，默认 `/var/lib/private-video/chat-images` |
+| `CHAT_IMAGE_MAX_BYTES` | 单张原始图片大小上限，默认8MB |
+| `CHAT_IMAGE_MAX_PIXELS` | 原始图片最大总像素，默认2500万 |
+| `CHAT_IMAGE_MAX_DIMENSION` | 转码后最长边上限，默认4096 |
 
 完整样例见 `deploy/private-video.env.example`；默认值以 `private_video/settings.py` 为准。
+
+已有安装升级时，如果环境文件尚无授权码加密密钥，应在迁移和重启前生成一次并追加：
+
+```bash
+umask 077
+printf 'ACCESS_CODE_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 48)" >> /etc/private-video.env
+```
+
+此值后续不得随意更换，否则既有加密授权码无法在管理端恢复显示。升级前已经创建且只保存HMAC摘要的历史码不可逆恢复，管理页面会标注“历史码不可恢复”；可按业务需要手工更换或重新生成。
 
 ## 6. 执行初始化
 
@@ -212,7 +229,11 @@ journalctl -u private-video-web -u private-video-chat \
 
 - 检查健康接口、管理端、聊天室管理和统一入口
 - 临时生成测试视频并等待扫描转码
-- 创建临时授权码，验证观看页、HLS清单和分片
+- 创建临时视频与聊天室授权码，验证staff管理端可查看完整值
+- 使用同一浏览器身份两次进入临时聊天室，验证参与者记录得到复用
+- 上传临时聊天图片，验证WebP转码、访客/staff读取和内部目录不可直访
+- 删除临时视频授权码后以相同码值重新生成，验证旧观看记录仍关联原授权
+- 验证观看页、HLS清单和分片
 - 完成后删除本次创建的测试数据和文件
 
 运行前确认 `/root/private-video-admin.txt` 中的管理员账号仍有效，并确认服务器有可用FFmpeg编码器。
@@ -220,7 +241,7 @@ journalctl -u private-video-web -u private-video-chat \
 ## 10. 更新发布
 
 1. 确认目标服务器和数据库名称。
-2. 备份MySQL、`/etc/private-video.env` 和 `/root/private-video-admin.txt`。
+2. 备份MySQL、`/etc/private-video.env`、`/root/private-video-admin.txt` 和 `/var/lib/private-video/chat-images`；数据库与聊天图片应作为同一恢复点保存。
 3. 更新代码并安装新增依赖。
 4. 查看迁移计划并执行迁移。
 5. 收集静态文件。
@@ -251,7 +272,8 @@ deploy/smoke_test.sh
 - 确认新迁移是否可逆，不要直接修改迁移历史。
 - 需要恢复数据库时先停止Web、Chat、Worker和Beat。
 - 恢复与备份迁移状态匹配的代码，再导入数据库并执行 `manage.py migrate`。
-- `/video` 和HLS目录不应作为普通回滚手段删除。
+- `/video`、HLS和聊天图片目录不应作为普通回滚手段删除。
+- 若恢复到包含聊天图片消息的数据库时间点，应同时恢复该时间点的 `/var/lib/private-video/chat-images`；只恢复数据库会留下无法显示的图片记录，只恢复文件会留下未被数据库引用的文件。
 - 回滚后重启4个应用服务，验证Nginx并运行冒烟测试。
 
 数据库备份和恢复命令见 [数据库手册](DATABASE.md)。
@@ -269,6 +291,23 @@ redis-cli -u "$CHAT_REDIS_URL" ping
 ```
 
 确认 `USE_REDIS_CHANNEL_LAYER=1`、Nginx `/ws/chat/` 代理存在，并且访客Cookie路径为 `/`。
+
+### 聊天图片无法上传或显示
+
+确认环境变量和目录权限：
+
+```bash
+set -a
+source /etc/private-video.env
+set +a
+
+test -n "$CHAT_IMAGE_DIR"
+install -d -o privatevideo -g privatevideo -m 0750 "$CHAT_IMAGE_DIR"
+stat -c '%U:%G %a %n' "$CHAT_IMAGE_DIR"
+df -h "$CHAT_IMAGE_DIR"
+```
+
+上传请求必须经过Gunicorn的聊天室图片接口，Nginx对应路由允许的请求体大小应略大于 `CHAT_IMAGE_MAX_BYTES`。图片读取依赖 `/_protected_chat_images/` 内部位置；该位置必须保留 `internal`，不能为了排障改成公开目录。修改Nginx后运行 `nginx -t && systemctl reload nginx`，再执行 `deploy/smoke_test.sh` 验证上传、WebP转码、访客/staff读取以及内部路径不可直访。
 
 ### 授权提交出现CSRF失败
 

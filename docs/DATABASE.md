@@ -40,7 +40,7 @@ cd /opt/private-video
 | 表 | 内容 |
 | --- | --- |
 | `videos_video` | 原文件路径、显示名称、媒体信息、转码状态、共享状态 |
-| `videos_accesscode` | 视频授权码HMAC摘要、尾号、有效期和删除状态 |
+| `videos_accesscode` | 视频授权码HMAC摘要、仅对未删除记录唯一的有效摘要、加密密文、尾号、有效期和删除状态 |
 | `videos_playbacksession` | 播放会话令牌摘要、IP、观看统计和状态 |
 | `videos_viewevent` | 播放开始、心跳、暂停、跳转和结束事件 |
 | `videos_securityevent` | 授权失败、限流和IP黑名单事件 |
@@ -51,9 +51,9 @@ cd /opt/private-video
 
 | 表 | 内容 |
 | --- | --- |
-| `chat_chatroom` | 聊天室名称、授权码摘要、昵称组和开放状态 |
-| `chat_chatparticipant` | 访客令牌摘要、IP、昵称、头像、进入和撤销时间 |
-| `chat_chatmessage` | 消息正文、发送者、时间和客户端幂等编号 |
+| `chat_chatroom` | 聊天室名称、授权码摘要、加密密文、昵称组和开放状态 |
+| `chat_chatparticipant` | 访客令牌摘要、临时身份摘要、设备特征摘要、IP、昵称、头像、进入和撤销时间 |
+| `chat_chatmessage` | 文本/图片消息、受保护图片相对路径与尺寸、发送者、时间和客户端幂等编号 |
 
 ### Django
 
@@ -62,7 +62,14 @@ cd /opt/private-video
 - `django_migrations`：已执行迁移
 - `django_admin_log`：Django Admin操作记录
 
-授权码明文、播放令牌明文和聊天访客令牌明文不应出现在数据库中。
+授权码明文不直接存储，数据库中的加密密文可由应用使用
+`ACCESS_CODE_ENCRYPTION_KEY` 解密并仅向staff展示。播放令牌、聊天访客令牌和临时身份标识明文不应出现在数据库中。
+
+`code_digest`允许保留多个历史相同值，`active_digest`只在授权码未删除时保存摘要并具有唯一约束。删除时该字段置空，因此码值可复用，同时播放历史仍指向原授权记录。
+
+聊天图片二进制不写入MySQL；数据库只保存随机相对路径、WebP类型、字节数及宽高。消息必须至少包含正文或图片之一。
+
+必须随数据库备份同步备份 `/etc/private-video.env`。丢失或更改授权码加密密钥后，既有授权码仍可凭HMAC摘要验证，但管理端无法恢复显示其完整值。
 
 ## 4. 迁移流程
 
@@ -125,6 +132,9 @@ grep -q 'Table structure for table `chat_chatroom`' private_video-YYYYMMDD-HHMMS
 - `/root/private-video-admin.txt`
 - 与数据库迁移状态匹配的应用版本
 - 根据恢复目标决定是否备份 `/video` 与HLS目录
+- `/var/lib/private-video/chat-images` 聊天图片目录
+
+数据库转储与聊天图片目录应记录同一个备份时间点。图片消息的元数据位于MySQL，二进制位于文件系统；只保存其中一部分不能完整恢复聊天记录。
 
 ## 6. 恢复
 
@@ -139,13 +149,16 @@ systemctl stop private-video-web private-video-chat private-video-worker private
 4. 创建空数据库并导入转储。
 5. 部署与转储迁移状态匹配的代码。
 6. 执行 `manage.py migrate` 补齐后续迁移。
-7. 启动服务并验证：
+7. 若备份包含聊天图片，在应用服务停止期间将图片目录恢复到 `CHAT_IMAGE_DIR`，执行 `chown -R privatevideo:privatevideo "$CHAT_IMAGE_DIR"` 并确认目录权限为0750。
+8. 启动服务并验证：
 
 ```bash
 systemctl start private-video-web private-video-chat private-video-worker private-video-beat
 systemctl is-active private-video-web private-video-chat private-video-worker private-video-beat nginx
 /opt/private-video/deploy/smoke_test.sh
 ```
+
+恢复后应抽查包含图片的聊天记录，确认访客只能读取当前聊天室图片、staff可以从聊天记录页面读取图片，且Nginx内部图片路径无法被外部直接访问。
 
 ## 7. 数据保留与清理
 

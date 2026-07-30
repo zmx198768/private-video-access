@@ -111,7 +111,7 @@ def access_page(request):
 @never_cache
 @require_POST
 def authorize(request):
-    from chat.models import ChatParticipant, ChatRoom
+    from chat.models import CHAT_IDENTITY_COOKIE_NAME, ChatParticipant, ChatRoom
 
     ip = client_ip(request)
     form = CodeEntryForm(request.POST)
@@ -163,10 +163,12 @@ def authorize(request):
         return response
 
     if room and room.is_active:
-        participant, token = ChatParticipant.create_for(
+        participant, token, identity_token, _ = ChatParticipant.resolve_for_identity(
             room=room,
             ip_address=ip,
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            identity_token=request.COOKIES.get(CHAT_IDENTITY_COOKIE_NAME),
+            cookies=request.COOKIES,
         )
         response = redirect("chat:room", participant_id=participant.id)
         response.set_cookie(
@@ -175,6 +177,15 @@ def authorize(request):
             max_age=60 * 60 * 24 * 7,
             httponly=True,
             secure=request.is_secure(),
+            samesite="Lax",
+            path="/",
+        )
+        response.set_cookie(
+            CHAT_IDENTITY_COOKIE_NAME,
+            identity_token,
+            max_age=settings.CHAT_IDENTITY_DAYS * 24 * 60 * 60,
+            httponly=True,
+            secure=settings.SESSION_COOKIE_SECURE,
             samesite="Lax",
             path="/",
         )
@@ -580,7 +591,7 @@ def delete_code(request, code_id):
     with transaction.atomic():
         code.enabled = False
         code.deleted_at = now
-        code.save(update_fields=["enabled", "deleted_at", "updated_at"])
+        code.save(update_fields=["enabled", "deleted_at", "updated_at", "active_digest"])
         PlaybackSession.objects.filter(
             access_code=code,
             state=PlaybackSession.State.ACTIVE,

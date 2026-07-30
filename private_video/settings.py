@@ -9,6 +9,7 @@ def env_bool(name, default=False):
 
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-development-key-change-me")
+ACCESS_CODE_ENCRYPTION_KEY = os.getenv("ACCESS_CODE_ENCRYPTION_KEY", "")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = [value.strip() for value in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if value.strip()]
 CSRF_TRUSTED_ORIGINS = [value.strip() for value in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if value.strip()]
@@ -154,6 +155,11 @@ else:
 CHAT_MESSAGE_MAX_LENGTH = int(os.getenv("CHAT_MESSAGE_MAX_LENGTH", "2000"))
 CHAT_SEND_RATE_PER_MINUTE = int(os.getenv("CHAT_SEND_RATE_PER_MINUTE", "30"))
 CHAT_ENTRY_RATE_PER_MINUTE = int(os.getenv("CHAT_ENTRY_RATE_PER_MINUTE", "10"))
+CHAT_IDENTITY_DAYS = int(os.getenv("CHAT_IDENTITY_DAYS", "30"))
+CHAT_IMAGE_DIR = Path(os.getenv("CHAT_IMAGE_DIR", "/var/lib/private-video/chat-images"))
+CHAT_IMAGE_MAX_BYTES = int(os.getenv("CHAT_IMAGE_MAX_BYTES", str(8 * 1024 * 1024)))
+CHAT_IMAGE_MAX_PIXELS = int(os.getenv("CHAT_IMAGE_MAX_PIXELS", "25000000"))
+CHAT_IMAGE_MAX_DIMENSION = int(os.getenv("CHAT_IMAGE_MAX_DIMENSION", "4096"))
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"

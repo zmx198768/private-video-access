@@ -27,7 +27,14 @@
               <td>{{ message.created_at|date:"Y-m-d H:i:s" }}</td>
               <td>{{ message.participant.display_name|default:"已离开访客" }}</td>
               <td class="mono">{{ message.participant.ip_address|default:"—" }}</td>
-              <td class="message-body-cell">{{ message.body }}</td>
+              <td class="message-body-cell">
+                {% if message.image_relative_path %}
+                  <a class="record-image-link" href="{% url 'chat:staff_message_image' message.id %}" target="_blank" rel="noopener">
+                    <img src="{% url 'chat:staff_message_image' message.id %}" alt="聊天图片" loading="lazy">
+                  </a>
+                {% endif %}
+                {% if message.body %}<span>{{ message.body }}</span>{% endif %}
+              </td>
             </tr>
           {% empty %}
             <tr><td colspan="4" class="empty">该聊天室暂无聊天记录。</td></tr>

@@ -18,7 +18,12 @@
           <div class="selected-video-copy">
             <span>当前聊天室</span>
             <strong>{{ room.name }}</strong>
-            <small>当前授权码 ******{{ room.code_hint }} · 昵称组《{{ room.nickname_group_label }}》</small>
+            <small>当前授权码
+              {% with plain=room.revealed_code %}
+                {% if plain %}<span class="mono">{{ plain }}</span>{% else %}<span class="legacy-code">历史码不可恢复（尾号 {{ room.code_hint }}）</span>{% endif %}
+              {% endwith %}
+              · 昵称组《{{ room.nickname_group_label }}》
+            </small>
           </div>
           <span class="status {% if room.is_active %}status-live{% else %}status-off{% endif %}">{% if room.is_active %}正在开放{% else %}已经关闭{% endif %}</span>
         </div>
@@ -83,14 +88,14 @@
     <aside class="code-info-panel">
       <div class="info-icon" aria-hidden="true">10</div>
       <h2>与视频授权一致的保护逻辑</h2>
-      <p>完整授权码只显示一次，数据库只保存HMAC摘要和末4位。</p>
+      <p>数据库保存HMAC摘要和加密密文，完整授权码仅向管理员开放。</p>
       <ul class="security-list">
         <li><span>✓</span><div><strong>手工或随机</strong><small>两种方式都检查格式和唯一性</small></div></li>
         <li><span>✓</span><div><strong>多人实时聊天</strong><small>同一授权码允许多人同时进入</small></div></li>
         <li><span>✓</span><div><strong>独立人物昵称</strong><small>每位参与者自动获得不同备用昵称</small></div></li>
         <li><span>✓</span><div><strong>更换立即失效</strong><small>旧授权码和现有会话会被撤销</small></div></li>
       </ul>
-      <div class="info-note"><span aria-hidden="true">!</span><p>创建后请立即复制授权码，离开结果页后无法恢复明文。</p></div>
+      <div class="info-note"><span aria-hidden="true">!</span><p>授权码可在聊天室管理页面再次查看；请只通过可信渠道发送给参与者。</p></div>
     </aside>
   </div>
 </main>

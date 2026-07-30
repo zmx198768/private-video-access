@@ -43,11 +43,17 @@
             <div class="code-list">
               {% for code in video.access_codes.all %}
                 <div class="code-row">
-                  <span class="mono">******{{ code.code_hint }}</span>
+                  {% with plain=code.revealed_code %}
+                    {% if plain %}
+                      <span class="mono">{{ plain }}</span>
+                    {% else %}
+                      <span class="legacy-code">历史码不可恢复（尾号 {{ code.code_hint }}）</span>
+                    {% endif %}
+                  {% endwith %}
                   <span>{{ code.state_label }}</span>
                   <span>{{ code.expires_at|date:"Y-m-d H:i" }} 到期</span>
                   <span>{{ code.note|default:"无备注" }}</span>
-                  <form method="post" action="{% url 'videos:delete_code' code.id %}" onsubmit="return confirm('确定删除授权码 ****{{ code.code_hint }}？删除后将立即失效，且无法恢复。')">
+                  <form method="post" action="{% url 'videos:delete_code' code.id %}" onsubmit="return confirm('确定删除该授权码？删除后将立即失效，且无法恢复。')">
                     {% csrf_token %}
                     <button class="text-link delete-link" type="submit">删除</button>
                   </form>
@@ -77,7 +83,11 @@
         {% for session in recent_sessions %}
           <tr>
             <td>{{ session.access_code.video.title }}</td>
-            <td class="mono">******{{ session.access_code.code_hint }}</td>
+            <td class="mono">
+              {% with plain=session.access_code.revealed_code %}
+                {% if plain %}{{ plain }}{% else %}<span class="legacy-code">历史码不可恢复（尾号 {{ session.access_code.code_hint }}）</span>{% endif %}
+              {% endwith %}
+            </td>
             <td>{{ session.ip_address|default:"—" }}</td>
             <td>{{ session.authorized_at|date:"Y-m-d H:i:s" }}</td>
             <td>{{ session.watched_seconds }} 秒</td>

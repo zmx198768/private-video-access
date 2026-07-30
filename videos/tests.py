@@ -39,7 +39,7 @@ class AccessCodeTests(TestCase):
             sharing_enabled=True,
         )
 
-    def test_issue_creates_ten_character_unique_code_and_only_stores_digest(self):
+    def test_issue_creates_unique_code_and_encrypts_recoverable_admin_copy(self):
         first, first_plain = AccessCode.issue(
             video=self.video, expires_at=timezone.now() + timezone.timedelta(days=1)
         )
@@ -51,6 +51,9 @@ class AccessCodeTests(TestCase):
         self.assertNotEqual(first_plain, second_plain)
         self.assertEqual(first.code_digest, digest_access_code(first_plain))
         self.assertNotIn(first_plain, first.code_digest)
+        self.assertTrue(first.code_ciphertext)
+        self.assertNotIn(first_plain, first.code_ciphertext)
+        self.assertEqual(first.revealed_code, first_plain)
 
     def test_video_share_state_requires_active_code(self):
         self.assertFalse(self.video.is_currently_shared)
@@ -58,6 +61,18 @@ class AccessCodeTests(TestCase):
         self.assertTrue(self.video.is_currently_shared)
         self.video.sharing_enabled = False
         self.assertFalse(self.video.is_currently_shared)
+
+    def test_revealed_code_rejects_ciphertext_from_another_record(self):
+        first, _ = AccessCode.issue(
+            video=self.video,
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+        )
+        second, _ = AccessCode.issue(
+            video=self.video,
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+        )
+        first.code_ciphertext = second.code_ciphertext
+        self.assertIsNone(first.revealed_code)
 
     def test_video_code_cannot_duplicate_chat_room_code(self):
         from chat.models import ChatRoom
@@ -123,6 +138,23 @@ class PlaybackFlowTests(TestCase):
         self.assertNotContains(response, "系统主菜单")
         self.assertNotContains(response, 'class="system-name"')
         self.assertNotContains(response, "访问时间和IP地址会被记录")
+
+    def test_public_entry_title_is_forced_to_one_line(self):
+        css = (settings.BASE_DIR / "static" / "css" / "app.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            css,
+            r"\.access-card h1\s*\{[^}]*white-space:\s*nowrap",
+        )
+
+    def test_clipboard_helper_supports_insecure_http_fallback(self):
+        script = (settings.BASE_DIR / "static" / "js" / "clipboard.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("window.copyTextWithFallback", script)
+        self.assertIn('document.execCommand("copy")', script)
+        self.assertIn("window.isSecureContext", script)
 
     def test_watch_page_hides_staff_navigation_after_authorization(self):
         user = get_user_model().objects.create_user(
@@ -223,6 +255,59 @@ class ScannerTests(TestCase):
 
 
 class ManagementTests(TestCase):
+    def test_staff_management_reveals_full_code_but_public_entry_does_not(self):
+        user = get_user_model().objects.create_user(
+            "code-viewer",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        video = Video.objects.create(
+            title="完整授权码展示",
+            source_key="full-code-video",
+            source_path="/video/full-code.mp4",
+            processing_status=Video.ProcessingStatus.READY,
+            hls_relative_path="full-code/index.m3u8",
+            sharing_enabled=True,
+        )
+        code, plain = AccessCode.issue_custom(
+            code="SHOWCODE26",
+            video=video,
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+            created_by=user,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse("videos:manage"))
+        self.assertContains(response, plain)
+        self.assertNotContains(response, f"******{code.code_hint}")
+
+        self.client.logout()
+        response = self.client.get(reverse("videos:access"))
+        self.assertNotContains(response, plain)
+
+    def test_staff_management_marks_historical_unrecoverable_code(self):
+        user = get_user_model().objects.create_user(
+            "legacy-code-viewer",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        video = Video.objects.create(
+            title="历史授权码",
+            source_key="legacy-code-video",
+            source_path="/video/legacy-code.mp4",
+            processing_status=Video.ProcessingStatus.READY,
+            hls_relative_path="legacy-code/index.m3u8",
+        )
+        AccessCode.objects.create(
+            video=video,
+            code_digest=digest_access_code("LEGACY2626"),
+            code_hint="2626",
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("videos:manage"))
+        self.assertContains(response, "历史码不可恢复")
+
     def test_primary_management_pages_do_not_render_legacy_hero_header(self):
         user = get_user_model().objects.create_user(
             "compact-admin",
@@ -349,7 +434,7 @@ class ManagementTests(TestCase):
         response = self.client.post(reverse("videos:authorize"), {"code": "abcd2efgh3"})
         self.assertEqual(response.status_code, 302)
 
-    def test_manual_code_cannot_reuse_an_existing_or_deleted_code(self):
+    def test_manual_code_cannot_reuse_an_existing_active_code(self):
         user = get_user_model().objects.create_user("unique-admin", password="strong-test-password", is_staff=True)
         self.client.force_login(user)
         video = Video.objects.create(
@@ -378,6 +463,87 @@ class ManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "该授权码已被其他内容使用")
         self.assertEqual(video.access_codes.count(), 1)
+
+    def test_deleted_code_can_be_generated_again_without_rewriting_history(self):
+        user = get_user_model().objects.create_user(
+            "reuse-admin",
+            password="strong-test-password",
+            is_staff=True,
+        )
+        first_video = Video.objects.create(
+            title="旧授权目标",
+            source_key="reuse-old-video",
+            source_path="/video/reuse-old.mp4",
+            processing_status=Video.ProcessingStatus.READY,
+            hls_relative_path="reuse-old/index.m3u8",
+            sharing_enabled=True,
+        )
+        second_video = Video.objects.create(
+            title="新授权目标",
+            source_key="reuse-new-video",
+            source_path="/video/reuse-new.mp4",
+            processing_status=Video.ProcessingStatus.READY,
+            hls_relative_path="reuse-new/index.m3u8",
+        )
+        old_code, plain = AccessCode.issue_custom(
+            code="REUSE2026A",
+            video=first_video,
+            expires_at=timezone.now() + timezone.timedelta(days=1),
+            created_by=user,
+        )
+        old_session, _ = PlaybackSession.create_for(
+            old_code,
+            "127.0.0.1",
+            "reuse-history",
+        )
+        self.client.force_login(user)
+        self.client.post(reverse("videos:delete_code", args=[old_code.id]))
+
+        response = self.client.post(
+            reverse("videos:create_codes", args=[second_video.id]),
+            {
+                "starts_at": timezone.localtime().strftime("%Y-%m-%dT%H:%M"),
+                "expires_at": (
+                    timezone.localtime() + timezone.timedelta(days=1)
+                ).strftime("%Y-%m-%dT%H:%M"),
+                "code_mode": "manual",
+                "custom_code": plain,
+                "quantity": 1,
+                "note": "重新使用",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, plain)
+        self.assertEqual(
+            AccessCode.objects.filter(code_digest=digest_access_code(plain)).count(),
+            2,
+        )
+        old_code.refresh_from_db()
+        old_session.refresh_from_db()
+        new_code = AccessCode.objects.get(deleted_at__isnull=True)
+        self.assertEqual(old_code.video, first_video)
+        self.assertIsNone(old_code.active_digest)
+        self.assertEqual(old_session.access_code, old_code)
+        self.assertEqual(new_code.video, second_video)
+        self.assertEqual(new_code.active_digest, new_code.code_digest)
+
+        self.client.logout()
+        authorize_response = self.client.post(
+            reverse("videos:authorize"),
+            {"code": plain},
+        )
+        self.assertRedirects(
+            authorize_response,
+            reverse(
+                "videos:watch",
+                args=[PlaybackSession.objects.latest("authorized_at").id],
+            ),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            PlaybackSession.objects.latest("authorized_at").access_code,
+            new_code,
+        )
 
     def test_view_records_are_paginated(self):
         user = get_user_model().objects.create_user("records-admin", password="strong-test-password", is_staff=True)

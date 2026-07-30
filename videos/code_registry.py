@@ -10,7 +10,10 @@ def code_digest_in_use(
     access_code_model = apps.get_model("videos", "AccessCode")
     chat_room_model = apps.get_model("chat", "ChatRoom")
 
-    video_codes = access_code_model.objects.filter(code_digest=digest)
+    video_codes = access_code_model.objects.filter(
+        code_digest=digest,
+        deleted_at__isnull=True,
+    )
     if exclude_video_code_id:
         video_codes = video_codes.exclude(pk=exclude_video_code_id)
 

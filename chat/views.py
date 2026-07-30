@@ -1,4 +1,6 @@
 import logging
+import uuid
+from urllib.parse import quote
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -7,7 +9,7 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import transaction
 from django.db.models import Count, Max
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -18,8 +20,9 @@ from videos.ip_access import client_ip
 from videos.models import AdminAuditLog
 
 from .forms import ChatRoomForm
+from .images import ChatImageError, delete_chat_image, resolve_chat_image_path, store_chat_image
 from .models import ChatMessage, ChatParticipant, ChatRoom
-from .services import serialize_message
+from .services import send_rate_limit, serialize_message
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +89,10 @@ def room(request, participant_id):
             "initial_messages": newest,
             "initial_count": len(newest),
             "message_max_length": settings.CHAT_MESSAGE_MAX_LENGTH,
+            "image_max_mb": settings.CHAT_IMAGE_MAX_BYTES / (1024 * 1024),
             "history_url": reverse("chat:history", args=[participant.id]),
+            "upload_image_url": reverse("chat:upload_image", args=[participant.id]),
+            "image_base_url": reverse("chat:room", args=[participant.id]),
             "websocket_path": f"/ws/chat/{participant.id}/",
         },
     )
@@ -142,6 +148,100 @@ def history(request, participant_id):
             "has_more": has_more,
         }
     )
+
+
+def _protected_image_response(message):
+    if not message.image_relative_path:
+        raise Http404
+    try:
+        path = resolve_chat_image_path(message.image_relative_path)
+    except ChatImageError as exc:
+        raise Http404 from exc
+    if not path.is_file():
+        raise Http404
+    response = HttpResponse(content_type=message.image_content_type or "image/webp")
+    response["X-Accel-Redirect"] = (
+        f"/_protected_chat_images/{quote(message.image_relative_path, safe='/')}"
+    )
+    response["Cache-Control"] = "private, no-store"
+    response["Content-Disposition"] = "inline"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@require_POST
+def upload_image(request, participant_id):
+    participant = _valid_participant(request, participant_id)
+    if send_rate_limit(participant.id):
+        return JsonResponse({"error": "发送过于频繁，请稍后再试"}, status=429)
+    try:
+        stored = store_chat_image(request.FILES.get("image"), participant.room_id)
+    except ChatImageError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    try:
+        with transaction.atomic():
+            locked_participant = (
+                ChatParticipant.objects.select_for_update()
+                .select_related("room")
+                .get(pk=participant.id)
+            )
+            if not locked_participant.is_valid(client_ip(request)):
+                raise PermissionError
+            message = ChatMessage.objects.create(
+                room_id=locked_participant.room_id,
+                participant=locked_participant,
+                body="",
+                client_nonce=uuid.uuid4(),
+                image_relative_path=stored["relative_path"],
+                image_content_type=stored["content_type"],
+                image_size=stored["size"],
+                image_width=stored["width"],
+                image_height=stored["height"],
+            )
+            now = timezone.now()
+            locked_participant.last_seen_at = now
+            locked_participant.save(update_fields=["last_seen_at"])
+            locked_participant.room.last_message_at = message.created_at
+            locked_participant.room.save(
+                update_fields=["last_message_at", "updated_at"]
+            )
+    except PermissionError:
+        delete_chat_image(stored["relative_path"])
+        return JsonResponse({"error": "聊天室已关闭或会话已失效"}, status=403)
+    except Exception:
+        delete_chat_image(stored["relative_path"])
+        logger.exception("Unable to persist uploaded chat image")
+        return JsonResponse({"error": "图片保存失败，请稍后重试"}, status=500)
+
+    message = ChatMessage.objects.select_related("participant").get(pk=message.pk)
+    serialized = serialize_message(message)
+    try:
+        async_to_sync(get_channel_layer().group_send)(
+            f"chat_{message.room_id.hex}",
+            {"type": "chat.message", "message": serialized},
+        )
+    except Exception:
+        logger.exception("Unable to broadcast uploaded chat image %s", message.pk)
+    return JsonResponse({"message": serialized}, status=201)
+
+
+@require_GET
+def message_image(request, participant_id, message_id):
+    participant = _valid_participant(request, participant_id)
+    message = get_object_or_404(
+        ChatMessage,
+        pk=message_id,
+        room_id=participant.room_id,
+    )
+    return _protected_image_response(message)
+
+
+@staff_member_required
+@require_GET
+def staff_message_image(request, message_id):
+    message = get_object_or_404(ChatMessage, pk=message_id)
+    return _protected_image_response(message)
 
 
 @staff_member_required

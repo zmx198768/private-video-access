@@ -7,6 +7,8 @@
   id="chat-app"
   class="chat-app"
   data-history-url="{{ history_url }}"
+  data-upload-url="{{ upload_image_url }}"
+  data-image-base-url="{{ image_base_url }}"
   data-websocket-path="{{ websocket_path }}"
   data-participant-id="{{ participant.id }}"
   data-has-more="{% if initial_count == 50 %}true{% else %}false{% endif %}"
@@ -46,7 +48,12 @@
                 <span>{{ message.participant.masked_ip }}</span>
                 <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"m-d H:i:s" }}</time>
               </div>
-              <p>{{ message.body }}</p>
+              {% if message.has_image %}
+                <a class="chat-message-image" href="{% url 'chat:message_image' participant.id message.id %}" target="_blank" rel="noopener">
+                  <img src="{% url 'chat:message_image' participant.id message.id %}" alt="由{{ message.participant.display_name }}发送的聊天图片" loading="lazy" width="{{ message.image_width }}" height="{{ message.image_height }}">
+                </a>
+              {% endif %}
+              {% if message.body %}<p>{{ message.body }}</p>{% endif %}
             </div>
           </article>
         {% empty %}
@@ -55,10 +62,18 @@
       </div>
     </div>
     <form id="chat-compose" class="chat-compose">
+      {% csrf_token %}
+      <div class="chat-compose-tools">
+        <button id="chat-emoji-toggle" class="chat-tool-button" type="button" aria-expanded="false" aria-controls="chat-emoji-picker" title="选择表情">😊<span>表情</span></button>
+        <label id="chat-image-label" class="chat-tool-button" for="chat-image-input" title="上传图片">＋<span>图片</span></label>
+        <input id="chat-image-input" class="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+        <div id="chat-emoji-picker" class="chat-emoji-picker" role="group" aria-label="表情选择器" hidden></div>
+      </div>
       <label class="sr-only" for="chat-body">聊天消息</label>
       <textarea id="chat-body" maxlength="{{ message_max_length }}" rows="2" placeholder="输入消息，Enter发送，Shift+Enter换行"></textarea>
-      <button class="button button-primary" type="submit">发送</button>
+      <button id="chat-send" class="button button-primary" type="submit">发送</button>
     </form>
+    <p class="chat-upload-hint">支持JPG、PNG、GIF、WebP，发送时统一安全转码，单张不超过 {{ image_max_mb|floatformat:"-1" }} MB。</p>
     <p id="chat-error" class="chat-error" role="alert"></p>
   </section>
 </main>

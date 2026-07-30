@@ -124,14 +124,14 @@
       <h2>10位访问凭证</h2>
       <p>自动模式使用密码学安全随机数；手工模式会检查格式与历史唯一性。</p>
       <ul class="security-list">
-        <li><span>✓</span><div><strong>仅显示一次</strong><small>完整授权码生成后只展示一次</small></div></li>
-        <li><span>✓</span><div><strong>摘要存储</strong><small>数据库中不保存授权码明文</small></div></li>
+        <li><span>✓</span><div><strong>管理员可查看</strong><small>完整授权码仅在管理端展示</small></div></li>
+        <li><span>✓</span><div><strong>加密存储</strong><small>数据库保存HMAC摘要和加密密文</small></div></li>
         <li><span>✓</span><div><strong>独立控制</strong><small>每个码都可单独删除并立即失效</small></div></li>
         <li><span>✓</span><div><strong>访问审计</strong><small>记录授权时间、IP和观看进度</small></div></li>
       </ul>
       <div class="info-note">
         <span aria-hidden="true">!</span>
-        <p>生成完成后请立即复制保存。离开结果页面后无法再次查看完整授权码。</p>
+        <p>生成完成后可立即复制，也可稍后从视频管理页面再次查看。</p>
       </div>
     </aside>
   </div>

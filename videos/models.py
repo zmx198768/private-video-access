@@ -6,8 +6,10 @@ import unicodedata
 import uuid
 
 from django.conf import settings
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
+
+from .secret_codes import decrypt_access_code, encrypt_access_code
 
 CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
@@ -100,8 +102,17 @@ class Video(models.Model):
 class AccessCode(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     video = models.ForeignKey(Video, related_name="access_codes", on_delete=models.PROTECT, verbose_name="视频")
-    code_digest = models.CharField("授权码摘要", max_length=64, unique=True, db_index=True)
+    code_digest = models.CharField("授权码摘要", max_length=64, db_index=True)
+    active_digest = models.CharField(
+        "有效授权码摘要",
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+    )
     code_hint = models.CharField("授权码尾号", max_length=4)
+    code_ciphertext = models.CharField("授权码密文", max_length=255, blank=True, default="")
     starts_at = models.DateTimeField("生效时间", default=timezone.now)
     expires_at = models.DateTimeField("失效时间")
     enabled = models.BooleanField("启用", default=True)
@@ -122,6 +133,13 @@ class AccessCode(models.Model):
     def __str__(self):
         return f"{self.video.title} · ****{self.code_hint}"
 
+    def save(self, *args, **kwargs):
+        self.active_digest = None if self.deleted_at else self.code_digest
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"active_digest"}
+        return super().save(*args, **kwargs)
+
     @classmethod
     def issue(cls, *, video, expires_at, starts_at=None, note="", created_by=None):
         from .code_registry import code_digest_in_use
@@ -130,16 +148,22 @@ class AccessCode(models.Model):
             plain = "".join(secrets.choice(CODE_ALPHABET) for _ in range(10))
             digest = digest_access_code(plain)
             if not code_digest_in_use(digest):
-                obj = cls.objects.create(
-                    video=video,
-                    code_digest=digest,
-                    code_hint=plain[-4:],
-                    starts_at=starts_at or timezone.now(),
-                    expires_at=expires_at,
-                    note=note,
-                    created_by=created_by,
-                )
-                return obj, plain
+                try:
+                    with transaction.atomic():
+                        obj = cls.objects.create(
+                            video=video,
+                            code_digest=digest,
+                            active_digest=digest,
+                            code_hint=plain[-4:],
+                            code_ciphertext=encrypt_access_code(plain),
+                            starts_at=starts_at or timezone.now(),
+                            expires_at=expires_at,
+                            note=note,
+                            created_by=created_by,
+                        )
+                    return obj, plain
+                except IntegrityError:
+                    continue
         raise RuntimeError("无法生成唯一授权码")
 
     @classmethod
@@ -152,16 +176,29 @@ class AccessCode(models.Model):
         digest = digest_access_code(plain)
         if code_digest_in_use(digest):
             raise ValueError("该授权码已被其他内容使用，请更换一个")
-        obj = cls.objects.create(
-            video=video,
-            code_digest=digest,
-            code_hint=plain[-4:],
-            starts_at=starts_at or timezone.now(),
-            expires_at=expires_at,
-            note=note,
-            created_by=created_by,
-        )
+        try:
+            with transaction.atomic():
+                obj = cls.objects.create(
+                    video=video,
+                    code_digest=digest,
+                    active_digest=digest,
+                    code_hint=plain[-4:],
+                    code_ciphertext=encrypt_access_code(plain),
+                    starts_at=starts_at or timezone.now(),
+                    expires_at=expires_at,
+                    note=note,
+                    created_by=created_by,
+                )
+        except IntegrityError as exc:
+            raise ValueError("该授权码已被其他内容使用，请更换一个") from exc
         return obj, plain
+
+    @property
+    def revealed_code(self):
+        plain = decrypt_access_code(self.code_ciphertext)
+        if plain and hmac.compare_digest(digest_access_code(plain), self.code_digest):
+            return plain
+        return None
 
     def valid_at(self, moment=None):
         moment = moment or timezone.now()
